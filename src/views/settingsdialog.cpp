@@ -2,6 +2,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSettings>
+#include "services/logger.h"
 
 SettingsDialog::SettingsDialog(SettingsModel* model, QWidget *parent)
     : QDialog(parent)
@@ -66,6 +67,26 @@ void SettingsDialog::setupUI()
     m_apiGroup = new QGroupBox(tr("API设置"), this);
     QVBoxLayout* apiLayout = new QVBoxLayout(m_apiGroup);
 
+    // API提供商选择
+    QHBoxLayout* apiProviderLayout = new QHBoxLayout();
+    apiProviderLayout->addWidget(new QLabel(tr("API提供商:")));
+    m_apiProviderSelector = new QComboBox();
+    m_apiProviderSelector->addItem("OpenAI", "https://api.openai.com/v1/chat/completions");
+    m_apiProviderSelector->addItem("Deepseek", "https://api.deepseek.com/v1/chat/completions");
+    m_apiProviderSelector->addItem(tr("自定义"), "custom");
+    apiProviderLayout->addWidget(m_apiProviderSelector);
+    apiLayout->addLayout(apiProviderLayout);
+
+    // API URL输入（使用QWidget容器）
+    m_apiUrlWidget = new QWidget();
+    QHBoxLayout* apiUrlLayout = new QHBoxLayout(m_apiUrlWidget);
+    apiUrlLayout->setContentsMargins(0, 0, 0, 0);
+    apiUrlLayout->addWidget(new QLabel(tr("API地址:")));
+    m_apiUrlInput = new QLineEdit();
+    m_apiUrlInput->setPlaceholderText("https://your-api-endpoint/v1/chat/completions");
+    apiUrlLayout->addWidget(m_apiUrlInput);
+    apiLayout->addWidget(m_apiUrlWidget);
+
     // API密钥
     QHBoxLayout* apiKeyLayout = new QHBoxLayout();
     apiKeyLayout->addWidget(new QLabel(tr("API密钥:")));
@@ -78,7 +99,23 @@ void SettingsDialog::setupUI()
     QHBoxLayout* apiModelLayout = new QHBoxLayout();
     apiModelLayout->addWidget(new QLabel(tr("模型:")));
     m_apiModelSelector = new QComboBox();
-    m_apiModelSelector->addItems({"gpt-3.5-turbo", "gpt-4", "claude-3-opus", "claude-3-sonnet"});
+
+    // OpenAI 模型
+    m_openaiModels = QStringList({
+        "gpt-4-1106-preview",
+        "gpt-4",
+        "gpt-3.5-turbo-16k",
+        "gpt-3.5-turbo"
+    });
+
+    // Deepseek 模型
+    m_deepseekModels = QStringList({
+        "deepseek-chat",
+        "deepseek-coder",
+        "deepseek-math"
+    });
+
+    m_apiModelSelector->addItems(m_openaiModels);
     apiModelLayout->addWidget(m_apiModelSelector);
     apiLayout->addLayout(apiModelLayout);
 
@@ -139,9 +176,7 @@ void SettingsDialog::setupUI()
 
     // 根据当前模型类型显示/隐藏相关设置组
     onModelTypeChanged(m_modelTypeSelector->currentIndex());
-
-    // 加载Ollama模型列表
-    refreshOllamaModels();
+    onApiProviderChanged(m_apiProviderSelector->currentIndex());
 }
 
 void SettingsDialog::setupConnections()
@@ -155,31 +190,46 @@ void SettingsDialog::setupConnections()
     connect(m_cancelButton, &QPushButton::clicked,
             this, &QDialog::reject);
 
-    // 连接Ollama相关信号
+    // 连接API提供商变更信号
+    connect(m_apiProviderSelector, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &SettingsDialog::onApiProviderChanged);
+
+    // Ollama相关信号
     connect(m_refreshOllamaModelsBtn, &QPushButton::clicked,
             this, &SettingsDialog::refreshOllamaModels);
 
-    connect(&SettingsModel::instance(), &SettingsModel::ollamaModelsChanged,
+    connect(m_model, &SettingsModel::ollamaModelsChanged,
             this, &SettingsDialog::updateOllamaModelList);
 }
 
 void SettingsDialog::refreshOllamaModels()
 {
+    LOG_INFO("开始刷新Ollama模型列表");
     m_refreshOllamaModelsBtn->setEnabled(false);
     m_refreshOllamaModelsBtn->setText(tr("正在刷新..."));
-    SettingsModel::instance().refreshOllamaModels();
+    m_model->refreshOllamaModels();
 }
 
 void SettingsDialog::updateOllamaModelList()
 {
+    LOG_INFO("正在更新Ollama模型列表UI");
     QString currentModel = m_ollamaModelSelect->currentText();
     m_ollamaModelSelect->clear();
-    m_ollamaModelSelect->addItems(SettingsModel::instance().ollamaModels());
+
+    QStringList models = m_model->ollamaModels();
+    LOG_INFO(QString("获取到%1个Ollama模型").arg(models.size()));
+
+    m_ollamaModelSelect->addItems(models);
 
     // 恢复之前选择的模型
     int index = m_ollamaModelSelect->findText(currentModel);
     if (index >= 0) {
         m_ollamaModelSelect->setCurrentIndex(index);
+        LOG_INFO(QString("恢复选择模型: %1").arg(currentModel));
+    } else if (!models.isEmpty()) {
+        // 如果找不到之前的模型，但列表不为空，选择第一个
+        m_ollamaModelSelect->setCurrentIndex(0);
+        LOG_INFO(QString("选择新模型: %1").arg(m_ollamaModelSelect->currentText()));
     }
 
     m_refreshOllamaModelsBtn->setEnabled(true);
@@ -188,6 +238,7 @@ void SettingsDialog::updateOllamaModelList()
 
 void SettingsDialog::loadSettings()
 {
+    LOG_INFO("开始加载设置");
     QSettings settings;
 
     // 加载通用设置
@@ -197,6 +248,16 @@ void SettingsDialog::loadSettings()
     m_timeoutSpin->setValue(settings.value("timeout", 30).toInt());
 
     // 加载API设置
+    QString apiUrl = settings.value("apiUrl").toString();
+    int providerIndex = m_apiProviderSelector->findData(apiUrl);
+    if (providerIndex >= 0) {
+        m_apiProviderSelector->setCurrentIndex(providerIndex);
+    } else {
+        // 如果是自定义API地址
+        m_apiProviderSelector->setCurrentText("自定义");
+        m_apiUrlInput->setText(apiUrl);
+    }
+
     m_apiKeyInput->setText(settings.value("apiKey").toString());
     m_apiModelSelector->setCurrentText(settings.value("apiModel", "gpt-3.5-turbo").toString());
 
@@ -204,21 +265,20 @@ void SettingsDialog::loadSettings()
     m_ollamaHostInput->setText(settings.value("ollamaHost", "localhost").toString());
     m_ollamaPortInput->setValue(settings.value("ollamaPort", 11434).toInt());
 
-    // 设置当前Ollama模型
-    QString currentModel = settings.value("ollamaModel").toString();
-    if (!currentModel.isEmpty()) {
-        int index = m_ollamaModelSelect->findText(currentModel);
-        if (index >= 0) {
-            m_ollamaModelSelect->setCurrentIndex(index);
-        }
+    // 如果当前选择的是Ollama类型，先刷新模型列表
+    if (m_modelTypeSelector->currentData().toInt() == static_cast<int>(SettingsModel::ModelType::Ollama)) {
+        refreshOllamaModels();
     }
 
     // 加载本地模型设置
     m_localModelPathInput->setText(settings.value("localModelPath").toString());
+
+    LOG_INFO("设置加载完成");
 }
 
 void SettingsDialog::saveSettings()
 {
+    LOG_INFO("开始保存设置");
     QSettings settings;
 
     // 保存通用设置
@@ -228,6 +288,7 @@ void SettingsDialog::saveSettings()
     settings.setValue("timeout", m_timeoutSpin->value());
 
     // 保存API设置
+    settings.setValue("apiUrl", m_apiUrlInput->text());
     settings.setValue("apiKey", m_apiKeyInput->text());
     settings.setValue("apiModel", m_apiModelSelector->currentText());
 
@@ -241,15 +302,36 @@ void SettingsDialog::saveSettings()
 
     // 更新SettingsModel
     if (m_model) {
-        m_model->setModelType(static_cast<SettingsModel::ModelType>(
-            m_modelTypeSelector->currentData().toInt()));
+        SettingsModel::ModelType type = static_cast<SettingsModel::ModelType>(
+            m_modelTypeSelector->currentData().toInt());
+
+        m_model->setModelType(type);
+        m_model->setApiUrl(m_apiUrlInput->text());
         m_model->setApiKey(m_apiKeyInput->text());
-        m_model->setModelPath(m_localModelPathInput->text());
-        if (m_modelTypeSelector->currentData().toInt() == static_cast<int>(SettingsModel::ModelType::Ollama)) {
-            m_model->setCurrentModelName(m_ollamaModelSelect->currentText());
+
+        // 根据不同的模型类型设置相应的配置
+        switch (type) {
+            case SettingsModel::ModelType::API:
+                m_model->setCurrentModelName(m_apiModelSelector->currentText());
+                break;
+
+            case SettingsModel::ModelType::Ollama:
+                if (!m_ollamaModelSelect->currentText().isEmpty()) {
+                    m_model->setCurrentModelName(m_ollamaModelSelect->currentText());
+                    LOG_INFO(QString("设置Ollama模型: %1").arg(m_ollamaModelSelect->currentText()));
+                } else {
+                    LOG_WARNING("Ollama模型未选择");
+                }
+                break;
+
+            case SettingsModel::ModelType::Local:
+                m_model->setModelPath(m_localModelPathInput->text());
+                m_model->setCurrentModelName(QFileInfo(m_localModelPathInput->text()).fileName());
+                break;
         }
     }
 
+    LOG_INFO("设置保存完成");
     accept();
 }
 
@@ -263,6 +345,26 @@ void SettingsDialog::onModelTypeChanged(int index)
     m_localGroup->setVisible(type == SettingsModel::ModelType::Local);
 }
 
+void SettingsDialog::onApiProviderChanged(int index)
+{
+    QString provider = m_apiProviderSelector->currentText();
+    QString apiUrl = m_apiProviderSelector->currentData().toString();
+
+    // 更新API模型列表
+    updateApiModelList(provider);
+
+    // 显示/隐藏自定义API地址输入
+    bool isCustom = (apiUrl == "custom");
+    m_apiUrlWidget->setVisible(isCustom);
+
+    // 如果不是自定义,设置默认API地址
+    if (!isCustom) {
+        m_apiUrlInput->setText(apiUrl);
+    }
+
+    LOG_INFO(QString("切换API提供商到: %1").arg(provider));
+}
+
 void SettingsDialog::onBrowseModelPath()
 {
     QString path = QFileDialog::getOpenFileName(this,
@@ -272,5 +374,29 @@ void SettingsDialog::onBrowseModelPath()
 
     if (!path.isEmpty()) {
         m_localModelPathInput->setText(path);
+    }
+}
+
+void SettingsDialog::updateApiModelList(const QString& provider)
+{
+    LOG_INFO(QString("更新API模型列表，当前选择的提供商: %1").arg(provider));
+
+    m_apiModelSelector->clear();
+
+    if (provider == "OpenAI") {
+        m_apiModelSelector->addItems(m_openaiModels);
+    } else if (provider == "Deepseek") {
+        m_apiModelSelector->addItems(m_deepseekModels);
+    } else {
+        m_apiModelSelector->addItem(tr("未知提供商或未配置模型"));
+    }
+
+    // 设置当前选择的模型
+    QString currentModel = m_model->currentModelName();
+    int index = m_apiModelSelector->findText(currentModel);
+    if (index >= 0) {
+        m_apiModelSelector->setCurrentIndex(index);
+    } else if (m_apiModelSelector->count() > 0) {
+        m_apiModelSelector->setCurrentIndex(0);
     }
 }

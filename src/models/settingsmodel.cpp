@@ -37,16 +37,37 @@ void SettingsModel::loadSettings()
 
     // 加载API设置
     m_apiKey = settings.value("apiKey").toString();
-    m_currentModelName = settings.value("currentModel", "gpt-3.5-turbo").toString();
     m_apiUrl = settings.value("apiUrl", "https://api.openai.com/v1").toString();
 
-    // 加载Ollama设置
-    if (m_modelType == ModelType::Ollama) {
-        refreshOllamaModels();
+    // 根据不同的模型类型加载相应的设置
+    switch (m_modelType) {
+        case ModelType::API:
+            m_currentModelName = settings.value("apiModel", "gpt-3.5-turbo").toString();
+            break;
+
+        case ModelType::Ollama:
+            // 先刷新模型列表
+            refreshOllamaModels();
+            m_currentModelName = settings.value("ollamaModel").toString();
+            // 如果没有设置模型名称且有可用模型，使用第一个
+            if (m_currentModelName.isEmpty() && !m_ollamaModels.isEmpty()) {
+                m_currentModelName = m_ollamaModels.first();
+            }
+            break;
+
+        case ModelType::Local:
+            m_modelPath = settings.value("localModelPath").toString();
+            if (!m_modelPath.isEmpty()) {
+                m_currentModelName = QFileInfo(m_modelPath).fileName();
+            }
+            break;
     }
 
+    LOG_INFO(QString("设置加载完成，当前模型类型: %1，模型名称: %2")
+             .arg(static_cast<int>(m_modelType))
+             .arg(m_currentModelName));
+
     emit currentModelNameChanged(m_currentModelName);
-    LOG_INFO("设置加载完成");
 }
 
 void SettingsModel::saveSettings()
@@ -126,14 +147,6 @@ void SettingsModel::setCurrentModelName(const QString &name)
     }
 }
 
-void SettingsModel::setOllamaModels(const QStringList &models)
-{
-    if (m_ollamaModels != models) {
-        m_ollamaModels = models;
-        emit ollamaModelsChanged();
-    }
-}
-
 void SettingsModel::refreshOllamaModels()
 {
     // 使用QProcess异步获取Ollama模型列表
@@ -157,12 +170,27 @@ void SettingsModel::refreshOllamaModels()
             setOllamaModels(models);
             LOG_INFO(QString("已刷新Ollama模型列表，共%1个模型").arg(models.size()));
         } else {
-            LOG_WARNING("获取Ollama模型列表失败");
+            QString error = QString::fromUtf8(process->readAllStandardError());
+            LOG_ERROR(QString("获取Ollama模型列表失败: %1").arg(error));
         }
 
         process->deleteLater();
     });
 
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
+        LOG_ERROR(QString("执行 ollama list 命令失败: %1").arg(error));
+        process->deleteLater();
+    });
+
     process->start();
     LOG_INFO("正在刷新Ollama模型列表...");
+}
+
+void SettingsModel::setOllamaModels(const QStringList &models)
+{
+    if (m_ollamaModels != models) {
+        m_ollamaModels = models;
+        LOG_INFO("Ollama模型列表已更新");
+        emit ollamaModelsChanged();
+    }
 }

@@ -12,7 +12,7 @@ class APIService : public LLMService
     Q_OBJECT
 
 public:
-    explicit APIService(const QString& apiKey, QObject *parent = nullptr);
+    explicit APIService(const QString& apiKey, const QString& apiUrl = "https://api.openai.com/v1/chat/completions", const QString& modelName = "gpt-3.5-turbo", QObject *parent = nullptr);
     ~APIService() override;
 
     QFuture<QString> generateResponse(const QString& prompt) override;
@@ -23,9 +23,15 @@ private slots:
     void handleResponse(QNetworkReply* reply);
 
 private:
+    QString getProviderFromUrl(const QString& url) const;
+    QByteArray prepareRequestData(const QString& prompt) const;
+
     QString m_apiKey;
+    QString m_apiUrl;
+    QString m_provider;
+    QString m_currentModelName;
     QNetworkAccessManager* m_networkManager;
     QFutureInterface<QString> m_currentFuture;
 };
 
-#endif // APISERVICE_H 
+#endif // APISERVICE_H

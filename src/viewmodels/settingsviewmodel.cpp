@@ -2,6 +2,7 @@
 #include "services/apiservice.h"
 #include "services/ollamaservice.h"
 #include "services/localmodelservice.h"
+#include "services/logger.h"
 #include <QDebug>
 
 SettingsViewModel::SettingsViewModel(SettingsModel* model, QObject *parent)
@@ -49,47 +50,37 @@ LLMService* SettingsViewModel::createLLMService()
         switch (m_model->modelType()) {
             case SettingsModel::ModelType::API: {
                 QString apiKey = m_model->apiKey();
-                if (apiKey.isEmpty()) {
-                    emit errorOccurred("未设置API密钥");
-                    return nullptr;
-                }
-                service = new APIService(apiKey, this);
+                QString apiUrl = m_model->apiUrl();
+                QString modelName = m_model->currentModelName();
+                service = new APIService(apiKey, apiUrl, modelName, this);
                 break;
             }
             case SettingsModel::ModelType::Ollama: {
-                QString modelName = m_model->currentModelName();
-                if (modelName.isEmpty()) {
-                    emit errorOccurred("未选择Ollama模型");
-                    return nullptr;
-                }
-                service = new OllamaService(modelName, this);
+                service = new OllamaService(m_model->currentModelName(), this);
                 break;
             }
             case SettingsModel::ModelType::Local: {
-                QString modelPath = m_model->modelPath();
-                if (modelPath.isEmpty()) {
-                    emit errorOccurred("未选择本地模型文件");
-                    return nullptr;
-                }
-                service = new LocalModelService(modelPath, this);
+                service = new LocalModelService(m_model->modelPath(), this);
                 break;
             }
-            default:
+            default: {
                 emit errorOccurred("未知的模型类型");
                 return nullptr;
+            }
         }
 
-        if (service && !service->isAvailable()) {
-            emit errorOccurred("模型服务不可用");
+        if (!service->isAvailable()) {
+            QString error = QString("模型服务不可用: %1").arg(service->getModelName());
+            LOG_ERROR(error);
             delete service;
+            emit errorOccurred(error);
             return nullptr;
         }
 
         return service;
     } catch (const std::exception& e) {
-        if (service) {
-            delete service;
-        }
+        LOG_ERROR(QString("创建模型服务失败: %1").arg(e.what()));
+        delete service;
         emit errorOccurred(QString("创建模型服务失败: %1").arg(e.what()));
         return nullptr;
     }

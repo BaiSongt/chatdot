@@ -27,21 +27,17 @@ public:
     static SettingsModel& instance();
 
     QString apiKey() const { return m_apiKey; }
-    void setApiKey(const QString &apiKey);
-
     QString modelPath() const { return m_modelPath; }
-    void setModelPath(const QString &modelPath);
-
     QString apiUrl() const { return m_apiUrl; }
-    void setApiUrl(const QString &apiUrl);
-
     ModelType modelType() const { return m_modelType; }
-    void setModelType(ModelType type);
-
     QString currentModelName() const { return m_currentModelName; }
-    void setCurrentModelName(const QString &name);
-
     QStringList ollamaModels() const { return m_ollamaModels; }
+
+    void setApiKey(const QString &apiKey);
+    void setModelPath(const QString &modelPath);
+    void setApiUrl(const QString &apiUrl);
+    void setModelType(ModelType type);
+    void setCurrentModelName(const QString &name);
     void setOllamaModels(const QStringList &models);
     void refreshOllamaModels();
 

@@ -10,19 +10,22 @@ class LLMService : public QObject
     Q_OBJECT
 
 public:
-    explicit LLMService(QObject *parent = nullptr);
+    explicit LLMService(const QString& modelPath, QObject *parent = nullptr);
     virtual ~LLMService();
 
     virtual QFuture<QString> generateResponse(const QString& prompt) = 0;
     virtual bool isAvailable() const = 0;
     virtual QString getModelName() const = 0;
+    virtual void cancelGeneration();
 
 signals:
-    void errorOccurred(const QString& error);
     void responseGenerated(const QString& response);
+    void streamResponseReceived(const QString& partialResponse);
+    void errorOccurred(const QString& error);
 
 protected:
-    void emitError(const QString& error);
+    QString m_modelPath;
+    bool m_isCancelled;
 };
 
-#endif // LLMSERVICE_H 
+#endif // LLMSERVICE_H

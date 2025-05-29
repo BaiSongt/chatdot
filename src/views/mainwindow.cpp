@@ -87,11 +87,6 @@ void MainWindow::setupUI()
 
     m_mainLayout->addLayout(topLayout);
 
-    // 状态标签
-    m_statusLabel = new QLabel(this);
-    m_statusLabel->setStyleSheet("QLabel { color: #666666; font-size: 12px; }");
-    m_mainLayout->addWidget(m_statusLabel);
-
     // 聊天显示区域
     m_chatDisplay = new QTextEdit(this);
     m_chatDisplay->setReadOnly(true);
@@ -121,9 +116,6 @@ void MainWindow::setupUI()
 
     // 设置窗口大小
     resize(800, 600);
-
-    // 更新状态
-    updateStatusBar();
 }
 
 void MainWindow::setupMenu()
@@ -150,24 +142,41 @@ void MainWindow::setupMenu()
 
 void MainWindow::setupStatusBar()
 {
-    m_statusLabel = new QLabel(this);
-    statusBar()->addWidget(m_statusLabel);
-    updateStatusBar();
+    // 移除状态栏
+    statusBar()->hide();
 }
 
 void MainWindow::setupConnections()
 {
     // 连接按钮信号
     connect(m_sendButton, &QPushButton::clicked,
-            this, &MainWindow::onSendMessage);
+            this, [this]() {
+                if (m_isGenerating) {
+                    m_chatViewModel->cancelGeneration();
+                } else {
+                    onSendMessage();
+                }
+            });
     connect(m_clearButton, &QPushButton::clicked,
             this, &MainWindow::onClearChat);
     connect(m_imageButton, &QPushButton::clicked,
             this, &MainWindow::selectImage);
 
+    // 连接生成状态信号
+    connect(m_chatViewModel, &ChatViewModel::generationStarted,
+            this, &MainWindow::onGenerationStarted);
+    connect(m_chatViewModel, &ChatViewModel::generationFinished,
+            this, &MainWindow::onGenerationFinished);
+    connect(m_chatViewModel, &ChatViewModel::streamResponse,
+            this, &MainWindow::onStreamResponse);
+
     // 连接输入框回车信号
     connect(m_messageInput, &QLineEdit::returnPressed,
-            this, &MainWindow::onSendMessage);
+            this, [this]() {
+                if (!m_isGenerating) {
+                    onSendMessage();
+                }
+            });
 
     // 连接菜单动作
     connect(m_settingsAction, &QAction::triggered,
@@ -182,8 +191,8 @@ void MainWindow::setupConnections()
     // 连接视图模型信号
     connect(m_chatViewModel, &ChatViewModel::responseReceived,
             this, [this](const QString& response) {
-                m_chatDisplay->append(this->tr("<p><b>AI:</b> %1</p>").arg(response));
-                updateStatusBar();
+                m_chatDisplay->moveCursor(QTextCursor::End);
+                m_chatDisplay->insertPlainText("\n"); // 新段落
             });
     connect(m_chatViewModel, &ChatViewModel::errorOccurred,
             this, &MainWindow::onError);
@@ -344,37 +353,27 @@ void MainWindow::onModelSelectionChanged(int index)
         return;
     }
 
-    // 如果是有效选择，使用modelName或displayName
+    // 如果是有效选择，使用modelName
     if (modelName.isEmpty()) {
         modelName = displayName;
     }
 
-    // 判断模型类型
-    bool isApiModel = !displayName.startsWith("Ollama:") && !displayName.startsWith("本地:");
-
-    // 检查API配置
-    if (isApiModel && m_settingsModel->apiKey().isEmpty()) {
-        showError(tr("配置错误"), tr("请先在设置中配置API密钥"));
-
-        // 恢复到之前的选择
-        isUpdating = true;
-        refreshModelList();
-        isUpdating = false;
-        return;
-    }
-
-    // 设置模型类型
+    // 判断模型类型并设置
     if (displayName.startsWith("Ollama:")) {
         m_settingsModel->setModelType(SettingsModel::ModelType::Ollama);
+        // 移除 "Ollama: " 前缀
+        modelName = displayName.mid(8).trimmed();
     } else if (displayName.startsWith("本地:")) {
         m_settingsModel->setModelType(SettingsModel::ModelType::Local);
+        // 移除 "本地: " 前缀
+        modelName = displayName.mid(4).trimmed();
     } else {
         m_settingsModel->setModelType(SettingsModel::ModelType::API);
     }
 
     // 更新当前模型
     m_settingsModel->setCurrentModelName(modelName);
-    LOG_INFO(QString("切换到模型: %1").arg(modelName));
+    LOG_INFO(QString("切换到模型: %1 (类型: %2)").arg(modelName).arg(static_cast<int>(m_settingsModel->modelType())));
 
     // 创建新的LLMService
     LLMService* service = m_settingsViewModel->createLLMService();
@@ -389,7 +388,6 @@ void MainWindow::onModelSelectionChanged(int index)
 
     // 设置新的服务
     m_chatViewModel->setLLMService(service);
-    updateStatusBar();
 }
 
 void MainWindow::saveSettings()
@@ -397,28 +395,6 @@ void MainWindow::saveSettings()
     // 保存设置
     m_settingsModel->saveSettings();
     LOG_INFO("设置保存完成");
-}
-
-void MainWindow::updateStatusBar()
-{
-    QString modelType;
-    switch (m_settingsModel->modelType()) {
-        case SettingsModel::ModelType::API:
-            modelType = this->tr("API模式");
-            break;
-        case SettingsModel::ModelType::Ollama:
-            modelType = this->tr("Ollama模式");
-            break;
-        case SettingsModel::ModelType::Local:
-            modelType = this->tr("本地模式");
-            break;
-    }
-
-    QString status = tr("状态: 就绪 | %1").arg(modelType);
-    if (m_modelSelector && m_modelSelector->currentText().contains("---")) {
-        status = tr("请选择一个模型");
-    }
-    m_statusLabel->setText(status);
 }
 
 void MainWindow::onSendMessage()
@@ -432,114 +408,45 @@ void MainWindow::onSendMessage()
     m_chatDisplay->append(this->tr("<p><b>用户:</b> %1</p>").arg(message));
     m_messageInput->clear();
 
+    // 添加 AI 的初始响应
+    m_chatDisplay->append(this->tr("<p><b>AI:</b> "));
+
     // 发送消息
     m_chatViewModel->sendMessage(message);
-    updateStatusBar();
 }
 
-void MainWindow::onClearChat()
+void MainWindow::onGenerationStarted()
 {
-    m_chatDisplay->clear();
-    m_chatViewModel->clearChat();
-    updateStatusBar();
+    updateSendButton(true);
 }
 
-void MainWindow::onOpenSettings()
+void MainWindow::onGenerationFinished()
 {
-    SettingsDialog dialog(&SettingsModel::instance(), this);    if (dialog.exec() == QDialog::Accepted) {
-        refreshModelList();
-        LOG_INFO("设置已更新");
+    updateSendButton(false);
+    // 完成当前响应
+    m_chatDisplay->append("</p>");
+}
+
+void MainWindow::onStreamResponse(const QString& partialResponse)
+{
+    // 在当前行追加部分响应
+    m_chatDisplay->moveCursor(QTextCursor::End);
+    m_chatDisplay->insertPlainText(partialResponse);
+    // 保持滚动到底部
+    m_chatDisplay->verticalScrollBar()->setValue(
+        m_chatDisplay->verticalScrollBar()->maximum()
+    );
+}
+
+void MainWindow::updateSendButton(bool isGenerating)
+{
+    m_isGenerating = isGenerating;
+    if (isGenerating) {
+        m_sendButton->setText(tr("取消"));
+        m_sendButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogCancelButton));
+    } else {
+        m_sendButton->setText(tr("发送"));
+        m_sendButton->setIcon(QApplication::style()->standardIcon(QStyle::SP_CommandLink));
     }
-}
-
-void MainWindow::onSaveChat()
-{
-    QString fileName = QFileDialog::getSaveFileName(this, this->tr("保存聊天记录"), QString(), this->tr("文本文件 (*.txt)"));
-    if (fileName.isEmpty())
-        return;
-
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        showError(this->tr("保存失败"), this->tr("无法保存文件"));
-        return;
-    }
-
-    QTextStream out(&file);
-    out.setEncoding(QStringConverter::Utf8);
-    out << m_chatDisplay->toPlainText();
-}
-
-void MainWindow::onLoadChat()
-{
-    QString fileName = QFileDialog::getOpenFileName(this, this->tr("加载聊天记录"), QString(), this->tr("文本文件 (*.txt)"));
-    if (fileName.isEmpty())
-        return;
-
-    QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        showError(this->tr("加载失败"), this->tr("无法打开文件"));
-        return;
-    }
-
-    QTextStream in(&file);
-    in.setEncoding(QStringConverter::Utf8);
-    m_chatDisplay->setPlainText(in.readAll());
-}
-
-void MainWindow::onAbout()
-{
-    QMessageBox::about(this,
-        this->tr("关于 ChatDot"),
-        this->tr("ChatDot - AI聊天助手\n\n"
-           "版本: %1\n"
-           "基于Qt6开发\n\n"
-           "支持多种AI模型:\n"
-           "- OpenAI API\n"
-           "- Ollama\n"
-           "- 本地模型")
-        .arg(QApplication::applicationVersion()));
-}
-
-void MainWindow::onLogMessage(Logger::Level level, const QString& message)
-{
-    switch (level) {
-        case Logger::Level::Debug:
-            m_statusLabel->setText(this->tr("调试: %1").arg(message));
-            break;
-        case Logger::Level::Info:
-            m_statusLabel->setText(this->tr("信息: %1").arg(message));
-            break;
-        case Logger::Level::Warning:
-            m_statusLabel->setText(this->tr("警告: %1").arg(message));
-            break;
-        case Logger::Level::Error:
-            m_statusLabel->setText(this->tr("错误: %1").arg(message));
-            break;
-    }
-}
-
-void MainWindow::onError(const QString& error)
-{
-    showError(this->tr("错误"), error);
-    LOG_ERROR(error);
-}
-
-void MainWindow::showError(const QString& title, const QString& message)
-{
-    QMessageBox::critical(this, title, message);
-}
-
-void MainWindow::selectImage()
-{
-    QString fileName = QFileDialog::getOpenFileName(this,
-        this->tr("选择图片"),
-        QString(),
-        this->tr("图片文件 (*.png *.jpg *.jpeg *.bmp);;所有文件 (*.*)"));
-
-    if (fileName.isEmpty()) {
-        return;
-    }
-
-    // TODO: 处理图片上传
-    LOG_INFO(this->tr("已选择图片: %1").arg(fileName));
+    m_messageInput->setEnabled(!isGenerating);
 }

@@ -41,6 +41,9 @@ private slots:
     void onLogMessage(Logger::Level level, const QString& message);
     void onModelSelectionChanged(int index);
     void updateModelList();
+    void onGenerationStarted();
+    void onGenerationFinished();
+    void onStreamResponse(const QString& partialResponse);
 
 private:
     void setupUI();
@@ -53,6 +56,7 @@ private:
     void selectImage();
     void showError(const QString& title, const QString& message);
     void refreshModelList();
+    void updateSendButton(bool isGenerating);
 
     // Models
     ChatModel* m_chatModel;
@@ -65,16 +69,16 @@ private:
 
     // UI Components
     QWidget* m_centralWidget;
-    QVBoxLayout* m_mainLayout;
-    QComboBox* m_modelSelector;
-    QLabel* m_statusLabel;
     QTextEdit* m_chatDisplay;
     QLineEdit* m_messageInput;
     QPushButton* m_sendButton;
     QPushButton* m_clearButton;
     QPushButton* m_imageButton;
+    QComboBox* m_modelSelector;
+    QLabel* m_statusLabel;
+    bool m_isGenerating;
 
-    // Menu Actions
+    // Menu Items
     QAction* m_settingsAction;
     QAction* m_saveChatAction;
     QAction* m_loadChatAction;

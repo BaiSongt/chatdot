@@ -2,6 +2,7 @@
 #include "services/apiservice.h"
 #include "services/ollamaservice.h"
 #include "services/localmodelservice.h"
+#include "services/logger.h"
 #include <QDebug>
 
 ChatViewModel::ChatViewModel(ChatModel* model, QObject *parent)
@@ -24,14 +25,21 @@ void ChatViewModel::sendMessage(const QString& message)
     }
 
     if (!m_llmService->isAvailable()) {
-        emit errorOccurred("AI模型不可用");
+        QString modelName = m_llmService->getModelName();
+        LOG_ERROR(QString("模型 %1 不可用").arg(modelName));
+        emit errorOccurred(QString("AI模型 %1 不可用，请检查服务是否正常运行").arg(modelName));
         return;
     }
 
+    LOG_INFO(QString("发送消息到模型 %1").arg(m_llmService->getModelName()));
     QFuture<QString> future = m_llmService->generateResponse(message);
+
+    // 使用QFuture的异步回调处理响应和错误
     future.then([this](const QString& response) {
+        LOG_INFO(QString("收到模型响应: %1").arg(response.length()));
         handleResponse(response);
     }).onFailed([this](const std::exception& e) {
+        LOG_ERROR(QString("处理消息时发生错误: %1").arg(e.what()));
         handleError(QString::fromStdString(e.what()));
     });
 }

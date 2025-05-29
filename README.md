@@ -6,6 +6,7 @@ ChatDot 是一个基于 Qt 框架开发的跨平台聊天应用程序，支持�
 
 - 🌐 支持多种 AI 模型后端
   - OpenAI API
+  - DeepSeek API
   - Ollama 本地部署
   - 本地模型加载
 - 🎨 现代化界面设计

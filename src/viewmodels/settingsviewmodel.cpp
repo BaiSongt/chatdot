@@ -47,20 +47,40 @@ LLMService* SettingsViewModel::createLLMService()
     LLMService* service = nullptr;
 
     try {
+        QString modelName = m_model->currentModelName();
+        LOG_INFO(QString("创建LLM服务，类型: %1, 模型: %2").arg(
+            static_cast<int>(m_model->modelType())).arg(modelName));
+
         switch (m_model->modelType()) {
             case SettingsModel::ModelType::API: {
                 QString apiKey = m_model->apiKey();
                 QString apiUrl = m_model->apiUrl();
-                QString modelName = m_model->currentModelName();
+                if (apiKey.isEmpty()) {
+                    emit errorOccurred("API密钥未配置");
+                    return nullptr;
+                }
+                if (apiUrl.isEmpty()) {
+                    emit errorOccurred("API地址未配置");
+                    return nullptr;
+                }
                 service = new APIService(apiKey, apiUrl, modelName, this);
                 break;
             }
             case SettingsModel::ModelType::Ollama: {
-                service = new OllamaService(m_model->currentModelName(), this);
+                // 从Ollama: 前缀中提取真实的模型名称
+                if (modelName.startsWith("Ollama: ")) {
+                    modelName = modelName.mid(8);
+                }
+                service = new OllamaService(modelName, this);
                 break;
             }
             case SettingsModel::ModelType::Local: {
-                service = new LocalModelService(m_model->modelPath(), this);
+                QString modelPath = m_model->modelPath();
+                if (modelPath.isEmpty()) {
+                    emit errorOccurred("本地模型路径未配置");
+                    return nullptr;
+                }
+                service = new LocalModelService(modelPath, this);
                 break;
             }
             default: {

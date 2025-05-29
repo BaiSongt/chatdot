@@ -3,12 +3,31 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QUrlQuery>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QTimer>
+#include <QtConcurrent>
+#include <exception>
+#include <stdexcept>
+#include "services/logger.h"
 
 OllamaService::OllamaService(const QString& modelPath, QObject *parent)
     : LLMService(parent)
     , m_modelPath(modelPath)
     , m_networkManager(new QNetworkAccessManager(this))
 {
+    LOG_INFO(QString("创建 Ollama 服务，模型: %1").arg(modelPath));
+
+    // 设置网络请求超时
+    m_networkManager->setTransferTimeout(30000);  // 30秒超时
+
+    // 连接网络错误信号
+    connect(m_networkManager, &QNetworkAccessManager::finished,
+            this, [this](QNetworkReply* reply) {
+        if (reply->error() != QNetworkReply::NoError) {
+            LOG_ERROR(QString("网络请求错误: %1").arg(reply->errorString()));
+        }
+    });
 }
 
 OllamaService::~OllamaService()
@@ -17,69 +36,138 @@ OllamaService::~OllamaService()
 
 QFuture<QString> OllamaService::generateResponse(const QString& prompt)
 {
+    LOG_INFO("发送 Ollama 请求");
     QFutureInterface<QString> future;
     m_currentFuture = future;
 
-    QUrl url("http://localhost:11434/api/generate"); // Ollama API endpoint
+    // 再次检查服务可用性
+    if (!isAvailable()) {        QString error = "Ollama 服务不可用，请确保服务正在运行且模型已下载";
+        LOG_ERROR(error);
+        future.reportStarted();
+        future.reportException(std::make_exception_ptr(std::runtime_error(error.toStdString())));
+        future.reportFinished();
+        return future.future();
+    }
+
+    QUrl url("http://localhost:11434/api/generate");
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject json;
     json["model"] = m_modelPath;
     json["prompt"] = prompt;
+    json["stream"] = false;
+    json["options"] = QJsonObject{
+        {"temperature", 0.7},
+        {"top_p", 0.9},
+        {"num_predict", 1000}  // 限制生成的最大token数
+    };
 
-    QNetworkReply* reply = m_networkManager->post(request, QJsonDocument(json).toJson());
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    QByteArray jsonData = QJsonDocument(json).toJson();
+    LOG_INFO(QString("Ollama 请求数据: %1").arg(QString(jsonData)));
+
+    QNetworkReply* reply = m_networkManager->post(request, jsonData);
+
+    // 设置单个请求的超时
+    QTimer::singleShot(30000, reply, [reply]() {
+        if (reply->isRunning()) {
+            reply->abort();
+        }
+    });
+
+    // 连接错误信号
+    connect(reply, &QNetworkReply::errorOccurred,
+            this, [this](QNetworkReply::NetworkError error) {
+        LOG_ERROR(QString("网络请求错误: %1").arg(error));
+    });
+
+    connect(reply, &QNetworkReply::finished,
+            this, [this, reply]() {
         handleResponse(reply);
         reply->deleteLater();
     });
 
+    future.reportStarted();
     return future.future();
 }
 
 bool OllamaService::isAvailable() const
 {
-    // TODO: Implement a proper check for Ollama service availability
-    // This might involve sending a small request or checking a status endpoint
-    return !m_modelPath.isEmpty(); // Basic check: model path is set
+    // 检查 Ollama 服务是否运行
+    QProcess process;
+    process.start("ollama", QStringList() << "list");
+
+    bool started = process.waitForStarted(3000);  // 等待最多3秒
+    if (!started) {
+        LOG_ERROR("Ollama 服务未运行");
+        return false;
+    }
+
+    bool finished = process.waitForFinished(3000);  // 等待最多3秒
+    if (!finished || process.exitCode() != 0) {
+        LOG_ERROR(QString("Ollama 服务检查失败: %1").arg(
+            QString::fromUtf8(process.readAllStandardError())));
+        return false;
+    }
+
+    // 检查模型是否在列表中
+    QString output = QString::fromUtf8(process.readAllStandardOutput());
+    bool modelFound = output.contains(m_modelPath, Qt::CaseInsensitive);
+
+    if (!modelFound) {
+        LOG_ERROR(QString("未找到模型: %1\n可用模型列表:\n%2")
+                 .arg(m_modelPath)
+                 .arg(output));
+        return false;
+    }
+
+    LOG_INFO(QString("Ollama 服务可用，已确认模型 %1 存在").arg(m_modelPath));
+    return true;
 }
 
 QString OllamaService::getModelName() const
 {
-    return m_modelPath.isEmpty() ? "Ollama Model" : m_modelPath;
+    return m_modelPath;
 }
 
 void OllamaService::handleResponse(QNetworkReply* reply)
 {
     if (reply->error() == QNetworkReply::NoError) {
-        // Ollama can return responses in chunks (newline-delimited JSON)
-        // For simplicity, we'll just read the whole reply for now.
-        // A more robust implementation would process line by line.
-        QString response;
-        QByteArray replyData = reply->readAll();
-        // Assuming the reply is a single JSON object for now
-        QJsonDocument doc = QJsonDocument::fromJson(replyData);
-        if (doc.isObject()) {
-            QJsonObject obj = doc.object();
-            response = obj["response"].toString();
-        } else {
-             // Handle potential line-delimited JSON (need to parse each line)
-             QString dataString = QString::fromUtf8(replyData);
-             QStringList lines = dataString.split('\n', Qt::SkipEmptyParts);
-             for (const QString& line : lines) {
-                 QJsonDocument lineDoc = QJsonDocument::fromJson(line.toUtf8());
-                 if (lineDoc.isObject()) {
-                     QJsonObject lineObj = lineDoc.object();
-                     response += lineObj["response"].toString();
-                 }
-             }
-        }
+        QByteArray data = reply->readAll();
+        LOG_INFO(QString("收到 Ollama 响应，长度: %1 字节").arg(data.length()));
 
-        m_currentFuture.reportFinished(&response);
-    } else {
-        QString error = reply->errorString();
-        std::exception_ptr e = std::make_exception_ptr(std::runtime_error(error.toStdString()));
-        m_currentFuture.reportException(e);
-        emit errorOccurred(error);
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+
+        if (parseError.error != QJsonParseError::NoError) {
+            QString error = QString("JSON解析错误: %1").arg(parseError.errorString());
+            LOG_ERROR(error);            m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error(error.toStdString())));
+        }
+        else if (!doc.isObject()) {
+            LOG_ERROR("响应不是有效的JSON对象");
+            m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error("响应格式无效")));
+        }
+        else {
+            QJsonObject json = doc.object();
+            if (json.contains("response")) {
+                QString response = json["response"].toString();
+                LOG_INFO(QString("生成的响应长度: %1 字符").arg(response.length()));
+                m_currentFuture.reportResult(response);
+            }
+            else if (json.contains("error")) {
+                QString error = json["error"].toString();                LOG_ERROR(QString("Ollama 返回错误: %1").arg(error));
+                m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error(error.toStdString())));
+            }
+            else {
+                LOG_ERROR("响应中没有找到 response 或 error 字段");
+                m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error("响应格式无效")));
+            }
+        }
+    }    else {
+        QString errorString = reply->errorString();
+        LOG_ERROR(QString("网络请求失败: %1").arg(errorString));
+        m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error(errorString.toStdString())));
     }
-} 
+
+    m_currentFuture.reportFinished();
+}

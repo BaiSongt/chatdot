@@ -26,21 +26,24 @@ private slots:
     void loadSettings();
     void onModelTypeChanged(int index);
     void onBrowseModelPath();
+    void refreshOllamaModels();
+    void updateOllamaModelList();
+
 
 private:
     void setupUI();
     void setupConnections();
+
 
     SettingsModel* m_model;
 
     // API设置组
     QGroupBox* m_apiGroup;
     QLineEdit* m_apiKeyInput;
-    QComboBox* m_apiModelSelector;
-
-    // Ollama设置组
+    QComboBox* m_apiModelSelector;    // Ollama设置组
     QGroupBox* m_ollamaGroup;
-    QLineEdit* m_ollamaModelInput;
+    QComboBox* m_ollamaModelSelect;  // 改用ComboBox来选择模型
+    QPushButton* m_refreshOllamaModelsBtn;  // 刷新模型列表按钮
     QLineEdit* m_ollamaHostInput;
     QSpinBox* m_ollamaPortInput;
 
@@ -61,4 +64,4 @@ private:
     QPushButton* m_cancelButton;
 };
 
-#endif // SETTINGSDIALOG_H 
+#endif // SETTINGSDIALOG_H

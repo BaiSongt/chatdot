@@ -27,7 +27,7 @@ void SettingsDialog::setupUI()
     // 通用设置组
     m_generalGroup = new QGroupBox(tr("通用设置"), this);
     QVBoxLayout* generalLayout = new QVBoxLayout(m_generalGroup);
-    
+
     // 模型类型选择
     QHBoxLayout* modelTypeLayout = new QHBoxLayout();
     modelTypeLayout->addWidget(new QLabel(tr("模型类型:")));
@@ -65,7 +65,7 @@ void SettingsDialog::setupUI()
     // API设置组
     m_apiGroup = new QGroupBox(tr("API设置"), this);
     QVBoxLayout* apiLayout = new QVBoxLayout(m_apiGroup);
-    
+
     // API密钥
     QHBoxLayout* apiKeyLayout = new QHBoxLayout();
     apiKeyLayout->addWidget(new QLabel(tr("API密钥:")));
@@ -87,28 +87,27 @@ void SettingsDialog::setupUI()
     // Ollama设置组
     m_ollamaGroup = new QGroupBox(tr("Ollama设置"), this);
     QVBoxLayout* ollamaLayout = new QVBoxLayout(m_ollamaGroup);
-    
-    // Ollama模型
+
+    // Ollama模型选择
     QHBoxLayout* ollamaModelLayout = new QHBoxLayout();
     ollamaModelLayout->addWidget(new QLabel(tr("模型:")));
-    m_ollamaModelInput = new QLineEdit();
-    ollamaModelLayout->addWidget(m_ollamaModelInput);
+    m_ollamaModelSelect = new QComboBox();
+    ollamaModelLayout->addWidget(m_ollamaModelSelect);
+    m_refreshOllamaModelsBtn = new QPushButton(tr("刷新"));
+    ollamaModelLayout->addWidget(m_refreshOllamaModelsBtn);
     ollamaLayout->addLayout(ollamaModelLayout);
 
-    // Ollama主机
+    // Ollama服务器设置
     QHBoxLayout* ollamaHostLayout = new QHBoxLayout();
     ollamaHostLayout->addWidget(new QLabel(tr("主机:")));
     m_ollamaHostInput = new QLineEdit();
-    m_ollamaHostInput->setText("localhost");
     ollamaHostLayout->addWidget(m_ollamaHostInput);
     ollamaLayout->addLayout(ollamaHostLayout);
 
-    // Ollama端口
     QHBoxLayout* ollamaPortLayout = new QHBoxLayout();
     ollamaPortLayout->addWidget(new QLabel(tr("端口:")));
     m_ollamaPortInput = new QSpinBox();
     m_ollamaPortInput->setRange(1, 65535);
-    m_ollamaPortInput->setValue(11434);
     ollamaPortLayout->addWidget(m_ollamaPortInput);
     ollamaLayout->addLayout(ollamaPortLayout);
 
@@ -117,7 +116,7 @@ void SettingsDialog::setupUI()
     // 本地模型设置组
     m_localGroup = new QGroupBox(tr("本地模型设置"), this);
     QVBoxLayout* localLayout = new QVBoxLayout(m_localGroup);
-    
+
     // 模型路径
     QHBoxLayout* modelPathLayout = new QHBoxLayout();
     modelPathLayout->addWidget(new QLabel(tr("模型路径:")));
@@ -140,6 +139,9 @@ void SettingsDialog::setupUI()
 
     // 根据当前模型类型显示/隐藏相关设置组
     onModelTypeChanged(m_modelTypeSelector->currentIndex());
+
+    // 加载Ollama模型列表
+    refreshOllamaModels();
 }
 
 void SettingsDialog::setupConnections()
@@ -152,12 +154,42 @@ void SettingsDialog::setupConnections()
             this, &SettingsDialog::saveSettings);
     connect(m_cancelButton, &QPushButton::clicked,
             this, &QDialog::reject);
+
+    // 连接Ollama相关信号
+    connect(m_refreshOllamaModelsBtn, &QPushButton::clicked,
+            this, &SettingsDialog::refreshOllamaModels);
+
+    connect(&SettingsModel::instance(), &SettingsModel::ollamaModelsChanged,
+            this, &SettingsDialog::updateOllamaModelList);
+}
+
+void SettingsDialog::refreshOllamaModels()
+{
+    m_refreshOllamaModelsBtn->setEnabled(false);
+    m_refreshOllamaModelsBtn->setText(tr("正在刷新..."));
+    SettingsModel::instance().refreshOllamaModels();
+}
+
+void SettingsDialog::updateOllamaModelList()
+{
+    QString currentModel = m_ollamaModelSelect->currentText();
+    m_ollamaModelSelect->clear();
+    m_ollamaModelSelect->addItems(SettingsModel::instance().ollamaModels());
+
+    // 恢复之前选择的模型
+    int index = m_ollamaModelSelect->findText(currentModel);
+    if (index >= 0) {
+        m_ollamaModelSelect->setCurrentIndex(index);
+    }
+
+    m_refreshOllamaModelsBtn->setEnabled(true);
+    m_refreshOllamaModelsBtn->setText(tr("刷新"));
 }
 
 void SettingsDialog::loadSettings()
 {
     QSettings settings;
-    
+
     // 加载通用设置
     m_modelTypeSelector->setCurrentIndex(settings.value("modelType", 0).toInt());
     m_autoSaveCheck->setChecked(settings.value("autoSave", true).toBool());
@@ -169,9 +201,17 @@ void SettingsDialog::loadSettings()
     m_apiModelSelector->setCurrentText(settings.value("apiModel", "gpt-3.5-turbo").toString());
 
     // 加载Ollama设置
-    m_ollamaModelInput->setText(settings.value("ollamaModel", "llama2").toString());
     m_ollamaHostInput->setText(settings.value("ollamaHost", "localhost").toString());
     m_ollamaPortInput->setValue(settings.value("ollamaPort", 11434).toInt());
+
+    // 设置当前Ollama模型
+    QString currentModel = settings.value("ollamaModel").toString();
+    if (!currentModel.isEmpty()) {
+        int index = m_ollamaModelSelect->findText(currentModel);
+        if (index >= 0) {
+            m_ollamaModelSelect->setCurrentIndex(index);
+        }
+    }
 
     // 加载本地模型设置
     m_localModelPathInput->setText(settings.value("localModelPath").toString());
@@ -180,7 +220,7 @@ void SettingsDialog::loadSettings()
 void SettingsDialog::saveSettings()
 {
     QSettings settings;
-    
+
     // 保存通用设置
     settings.setValue("modelType", m_modelTypeSelector->currentIndex());
     settings.setValue("autoSave", m_autoSaveCheck->isChecked());
@@ -192,19 +232,22 @@ void SettingsDialog::saveSettings()
     settings.setValue("apiModel", m_apiModelSelector->currentText());
 
     // 保存Ollama设置
-    settings.setValue("ollamaModel", m_ollamaModelInput->text());
     settings.setValue("ollamaHost", m_ollamaHostInput->text());
     settings.setValue("ollamaPort", m_ollamaPortInput->value());
+    settings.setValue("ollamaModel", m_ollamaModelSelect->currentText());
 
     // 保存本地模型设置
     settings.setValue("localModelPath", m_localModelPathInput->text());
 
-    // 更新模型
+    // 更新SettingsModel
     if (m_model) {
         m_model->setModelType(static_cast<SettingsModel::ModelType>(
             m_modelTypeSelector->currentData().toInt()));
         m_model->setApiKey(m_apiKeyInput->text());
         m_model->setModelPath(m_localModelPathInput->text());
+        if (m_modelTypeSelector->currentData().toInt() == static_cast<int>(SettingsModel::ModelType::Ollama)) {
+            m_model->setCurrentModelName(m_ollamaModelSelect->currentText());
+        }
     }
 
     accept();
@@ -230,4 +273,4 @@ void SettingsDialog::onBrowseModelPath()
     if (!path.isEmpty()) {
         m_localModelPathInput->setText(path);
     }
-} 
+}

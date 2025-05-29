@@ -16,12 +16,10 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    LOG_INFO("开始初始化主窗口...");
-
-    // 初始化模型
+    LOG_INFO("开始初始化主窗口...");    // 初始化模型
     m_chatModel = new ChatModel(this);
-    m_settingsModel = new SettingsModel(this);
     m_imageModel = new ImageModel(this);
+    m_settingsModel = &SettingsModel::instance(); // 使用单例
 
     LOG_INFO("模型初始化完成");
 
@@ -65,7 +63,6 @@ MainWindow::~MainWindow()
 {
     LOG_INFO("正在保存设置...");
     saveSettings();
-    LOG_INFO("设置保存完成");
 }
 
 void MainWindow::setupUI()
@@ -77,19 +74,27 @@ void MainWindow::setupUI()
     // 创建主布局
     m_mainLayout = new QVBoxLayout(m_centralWidget);
 
+    // 添加模型标签
+    QHBoxLayout* modelLabelLayout = new QHBoxLayout();
+    m_modelLabel = new QLabel(this);
+    m_modelLabel->setStyleSheet("QLabel { color: #666666; font-size: 12px; }");
+    modelLabelLayout->addWidget(m_modelLabel);
+    modelLabelLayout->addStretch();
+    m_mainLayout->addLayout(modelLabelLayout);
+
     // 创建状态栏显示区域
     QHBoxLayout* statusLayout = new QHBoxLayout();
     m_statusLabel = new QLabel(this);
     statusLayout->addWidget(m_statusLabel);
     m_mainLayout->addLayout(statusLayout);
 
-    // 创建聊天显示区域
+    // 聊天显示区域
     m_chatDisplay = new QTextEdit(this);
     m_chatDisplay->setReadOnly(true);
     m_chatDisplay->setMinimumHeight(400);
     m_mainLayout->addWidget(m_chatDisplay);
 
-    // 创建输入区域
+    // 输入区域
     QHBoxLayout* inputLayout = new QHBoxLayout();
 
     m_messageInput = new QLineEdit(this);
@@ -112,6 +117,9 @@ void MainWindow::setupUI()
 
     // 设置窗口大小
     resize(800, 600);
+
+    // 更新当前模型标签
+    updateModelLabel(SettingsModel::instance().currentModelName());
 }
 
 void MainWindow::setupMenu()
@@ -175,32 +183,43 @@ void MainWindow::setupConnections()
             });
     connect(m_chatViewModel, &ChatViewModel::errorOccurred,
             this, &MainWindow::onError);
+
+    // 连接设置模型的信号
+    connect(&SettingsModel::instance(), &SettingsModel::currentModelNameChanged,
+            this, &MainWindow::updateModelLabel);
 }
 
 void MainWindow::loadSettings()
 {
-    QString settingsPath = QDir::homePath() + "/.chatdot/settings.json";
-    LOG_INFO(QString("正在加载设置文件: %1").arg(settingsPath));
-
-    if (m_settingsModel->loadFromFile(settingsPath)) {
-        LOG_INFO("设置加载成功");
-        updateStatusBar();
-    } else {
-        LOG_INFO("设置文件不存在或加载失败，使用默认设置");
-    }
+    // 确保设置已加载
+    m_settingsModel->loadSettings();
+    updateModelLabel(m_settingsModel->currentModelName());
+    LOG_INFO("设置加载完成");
 }
 
 void MainWindow::saveSettings()
 {
-    QString settingsPath = QDir::homePath() + "/.chatdot/settings.json";
-    LOG_INFO(QString("正在保存设置到: %1").arg(settingsPath));
+    // 保存设置
+    m_settingsModel->saveSettings();
+    LOG_INFO("设置保存完成");
+}
 
-    QDir().mkpath(QFileInfo(settingsPath).path());
-    if (m_settingsModel->saveToFile(settingsPath)) {
-        LOG_INFO("设置保存成功");
-    } else {
-        LOG_ERROR("设置保存失败");
+void MainWindow::updateModelLabel(const QString& modelName)
+{
+    QString modelType;
+    switch (SettingsModel::instance().modelType()) {
+        case SettingsModel::ModelType::API:
+            modelType = tr("API");
+            break;
+        case SettingsModel::ModelType::Ollama:
+            modelType = tr("Ollama");
+            break;
+        case SettingsModel::ModelType::Local:
+            modelType = tr("本地模型");
+            break;
     }
+
+    m_modelLabel->setText(tr("当前模型: %1 (%2)").arg(modelName, modelType));
 }
 
 void MainWindow::updateStatusBar()
@@ -218,7 +237,7 @@ void MainWindow::updateStatusBar()
             break;
     }
 
-    QString status = this->tr("当前模式: %1").arg(modelType);
+    QString status = tr("就绪 | 当前模型: %1").arg(SettingsModel::instance().currentModelName());
     m_statusLabel->setText(status);
 }
 
@@ -247,8 +266,9 @@ void MainWindow::onClearChat()
 
 void MainWindow::onOpenSettings()
 {
-    SettingsDialog dialog(m_settingsModel, this);
+    SettingsDialog dialog(&SettingsModel::instance(), this);
     if (dialog.exec() == QDialog::Accepted) {
+        updateModelLabel(m_settingsModel->currentModelName());
         LOG_INFO("设置已更新");
     }
 }

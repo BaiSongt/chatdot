@@ -1,5 +1,6 @@
 #include "views/mainwindow.h"
 #include "services/logger.h"
+#include "models/settingsmodel.h"
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QTranslator>
@@ -14,6 +15,9 @@ int main(int argc, char *argv[])
 
     // 初始化日志系统
     Logger::instance().init();
+
+    // 加载设置
+    SettingsModel::instance().loadSettings();
 
     // 设置翻译
     QTranslator qtTranslator;
@@ -36,9 +40,14 @@ int main(int argc, char *argv[])
     parser.addVersionOption();
     parser.process(app);
 
+    // 如果是Ollama模式，自动刷新模型列表
+    if (SettingsModel::instance().modelType() == SettingsModel::ModelType::Ollama) {
+        SettingsModel::instance().refreshOllamaModels();
+    }
+
     // 创建并显示主窗口
     MainWindow mainWindow;
     mainWindow.show();
 
     return app.exec();
-} 
+}

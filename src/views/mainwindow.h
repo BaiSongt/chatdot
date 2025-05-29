@@ -43,6 +43,7 @@ private slots:
     void updateStatusBar();
     void onError(const QString& error);
     void selectImage();
+    void updateModelLabel(const QString& modelName);
 
 private:
     void setupUI();
@@ -55,15 +56,13 @@ private:
 
     QWidget* m_centralWidget;
     QVBoxLayout* m_mainLayout;
+    QLabel* m_modelLabel;       // 新增：显示当前模型的标签
     QTextEdit* m_chatDisplay;
     QLineEdit* m_messageInput;
     QPushButton* m_sendButton;
     QPushButton* m_clearButton;
     QPushButton* m_imageButton;
-    QComboBox* m_modelTypeComboBox;
-    QLineEdit* m_apiKeyLineEdit;
-    QLineEdit* m_apiUrlLineEdit;
-    QPushButton* m_settingsButton;
+
     QLabel* m_statusLabel;
 
     ChatModel* m_chatModel;
@@ -78,4 +77,4 @@ private:
     QAction* m_aboutAction;
 };
 
-#endif // MAINWINDOW_H 
+#endif // MAINWINDOW_H

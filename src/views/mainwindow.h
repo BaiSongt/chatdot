@@ -5,17 +5,15 @@
 #include <QTextEdit>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QMenuBar>
-#include <QMenu>
-#include <QAction>
-#include <QStatusBar>
 #include <QLabel>
+#include <QComboBox>
+#include <QMenu>
+#include <QMenuBar>
+#include <QStatusBar>
 #include <QMessageBox>
 #include <QFileDialog>
-#include <QSettings>
-#include <QComboBox>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include "models/chatmodel.h"
 #include "models/imagemodel.h"
 #include "models/settingsmodel.h"
@@ -39,38 +37,44 @@ private slots:
     void onSaveChat();
     void onLoadChat();
     void onAbout();
-    void onLogMessage(Logger::Level level, const QString& message);
-    void updateStatusBar();
     void onError(const QString& error);
-    void selectImage();
-    void updateModelLabel(const QString& modelName);
+    void onLogMessage(Logger::Level level, const QString& message);
+    void onModelSelectionChanged(int index);
+    void updateModelList();
 
 private:
     void setupUI();
     void setupMenu();
-    void setupConnections();
     void setupStatusBar();
+    void setupConnections();
     void loadSettings();
     void saveSettings();
+    void updateStatusBar();
+    void selectImage();
     void showError(const QString& title, const QString& message);
+    void refreshModelList();
 
+    // Models
+    ChatModel* m_chatModel;
+    ImageModel* m_imageModel;
+    SettingsModel* m_settingsModel;
+
+    // ViewModels
+    ChatViewModel* m_chatViewModel;
+    SettingsViewModel* m_settingsViewModel;
+
+    // UI Components
     QWidget* m_centralWidget;
     QVBoxLayout* m_mainLayout;
-    QLabel* m_modelLabel;       // 新增：显示当前模型的标签
+    QComboBox* m_modelSelector;
+    QLabel* m_statusLabel;
     QTextEdit* m_chatDisplay;
     QLineEdit* m_messageInput;
     QPushButton* m_sendButton;
     QPushButton* m_clearButton;
     QPushButton* m_imageButton;
 
-    QLabel* m_statusLabel;
-
-    ChatModel* m_chatModel;
-    SettingsModel* m_settingsModel;
-    ChatViewModel* m_chatViewModel;
-    SettingsViewModel* m_settingsViewModel;
-    ImageModel* m_imageModel;
-
+    // Menu Actions
     QAction* m_settingsAction;
     QAction* m_saveChatAction;
     QAction* m_loadChatAction;

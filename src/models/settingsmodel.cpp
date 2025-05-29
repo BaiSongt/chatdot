@@ -37,7 +37,7 @@ void SettingsModel::loadSettings()
 
     // 加载API设置
     m_apiKey = settings.value("apiKey").toString();
-    m_apiUrl = settings.value("apiUrl", "https://api.openai.com/v1").toString();
+    m_apiUrl = settings.value("apiUrl", "https://api.openai.com/v1/chat/completions").toString();
 
     // 根据不同的模型类型加载相应的设置
     switch (m_modelType) {
@@ -47,12 +47,8 @@ void SettingsModel::loadSettings()
 
         case ModelType::Ollama:
             // 先刷新模型列表
-            refreshOllamaModels();
             m_currentModelName = settings.value("ollamaModel").toString();
-            // 如果没有设置模型名称且有可用模型，使用第一个
-            if (m_currentModelName.isEmpty() && !m_ollamaModels.isEmpty()) {
-                m_currentModelName = m_ollamaModels.first();
-            }
+            refreshOllamaModels();
             break;
 
         case ModelType::Local:
@@ -68,6 +64,7 @@ void SettingsModel::loadSettings()
              .arg(m_currentModelName));
 
     emit currentModelNameChanged(m_currentModelName);
+    emit modelTypeChanged();
 }
 
 void SettingsModel::saveSettings()

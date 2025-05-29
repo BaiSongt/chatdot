@@ -74,19 +74,23 @@ void MainWindow::setupUI()
     // 创建主布局
     m_mainLayout = new QVBoxLayout(m_centralWidget);
 
-    // 添加模型标签
-    QHBoxLayout* modelLabelLayout = new QHBoxLayout();
-    m_modelLabel = new QLabel(this);
-    m_modelLabel->setStyleSheet("QLabel { color: #666666; font-size: 12px; }");
-    modelLabelLayout->addWidget(m_modelLabel);
-    modelLabelLayout->addStretch();
-    m_mainLayout->addLayout(modelLabelLayout);
+    // 顶部工具栏布局
+    QHBoxLayout* topLayout = new QHBoxLayout();
 
-    // 创建状态栏显示区域
-    QHBoxLayout* statusLayout = new QHBoxLayout();
+    // 添加模型选择器
+    topLayout->addWidget(new QLabel(tr("当前模型:")));
+    m_modelSelector = new QComboBox();
+    m_modelSelector->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    m_modelSelector->setMinimumWidth(200);
+    topLayout->addWidget(m_modelSelector);
+    topLayout->addStretch();
+
+    m_mainLayout->addLayout(topLayout);
+
+    // 状态标签
     m_statusLabel = new QLabel(this);
-    statusLayout->addWidget(m_statusLabel);
-    m_mainLayout->addLayout(statusLayout);
+    m_statusLabel->setStyleSheet("QLabel { color: #666666; font-size: 12px; }");
+    m_mainLayout->addWidget(m_statusLabel);
 
     // 聊天显示区域
     m_chatDisplay = new QTextEdit(this);
@@ -118,8 +122,8 @@ void MainWindow::setupUI()
     // 设置窗口大小
     resize(800, 600);
 
-    // 更新当前模型标签
-    updateModelLabel(SettingsModel::instance().currentModelName());
+    // 更新状态
+    updateStatusBar();
 }
 
 void MainWindow::setupMenu()
@@ -184,16 +188,15 @@ void MainWindow::setupConnections()
     connect(m_chatViewModel, &ChatViewModel::errorOccurred,
             this, &MainWindow::onError);
 
-    // 连接设置模型的信号
-    connect(&SettingsModel::instance(), &SettingsModel::currentModelNameChanged,
-            this, &MainWindow::updateModelLabel);
+    // 连接模型选择器信号
+    connect(m_modelSelector, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onModelSelectionChanged);
 
-    // 连接设置改变信号，更新LLMService
-    connect(m_settingsViewModel, &SettingsViewModel::settingsChanged,
-            this, [this]() {
-                LLMService* service = m_settingsViewModel->createLLMService();
-                m_chatViewModel->setLLMService(service);
-            });
+    // 连接设置模型的信号
+    connect(m_settingsModel, &SettingsModel::currentModelNameChanged,
+            this, &MainWindow::updateModelList);
+    connect(m_settingsModel, &SettingsModel::ollamaModelsChanged,
+            this, &MainWindow::updateModelList);
 }
 
 void MainWindow::loadSettings()
@@ -201,14 +204,192 @@ void MainWindow::loadSettings()
     // 确保设置已加载
     m_settingsModel->loadSettings();
 
-    // 更新模型标签
-    updateModelLabel(m_settingsModel->currentModelName());
-
-    // 创建并设置LLMService
-    LLMService* service = m_settingsViewModel->createLLMService();
-    m_chatViewModel->setLLMService(service);
+    // 刷新模型列表
+    refreshModelList();
 
     LOG_INFO("设置加载完成");
+}
+
+void MainWindow::refreshModelList()
+{
+    // 如果当前类型是Ollama，先刷新模型列表
+    if (m_settingsModel->modelType() == SettingsModel::ModelType::Ollama) {
+        m_settingsModel->refreshOllamaModels();
+    }
+    updateModelList();
+}
+
+void MainWindow::updateModelList()
+{
+    LOG_INFO("更新模型列表");
+    QString currentModel = m_modelSelector->currentText();
+    m_modelSelector->clear();
+
+    // API 模型分类
+    m_modelSelector->addItem(tr("--- OpenAI 模型 ---"), "");
+    m_modelSelector->addItem("GPT-4 Turbo", "gpt-4-1106-preview");
+    m_modelSelector->addItem("GPT-4", "gpt-4");
+    m_modelSelector->addItem("GPT-3.5 Turbo 16K", "gpt-3.5-turbo-16k");
+    m_modelSelector->addItem("GPT-3.5 Turbo", "gpt-3.5-turbo");
+
+    // Deepseek 模型
+    m_modelSelector->addItem(tr("--- Deepseek 模型 ---"), "");
+    m_modelSelector->addItem("DeepSeek Chat", "deepseek-chat");
+    m_modelSelector->addItem("DeepSeek Coder", "deepseek-coder");
+
+    // Ollama 模型
+    if (m_settingsModel->modelType() == SettingsModel::ModelType::Ollama) {
+        QStringList ollamaModels = m_settingsModel->ollamaModels();
+        if (!ollamaModels.isEmpty()) {
+            m_modelSelector->addItem(tr("--- Ollama 模型 ---"), "");
+            for (const QString& model : ollamaModels) {
+                m_modelSelector->addItem(QString("Ollama: %1").arg(model), model);
+            }
+        }
+    }
+
+    // 本地模型
+    if (!m_settingsModel->modelPath().isEmpty()) {
+        m_modelSelector->addItem(tr("--- 本地模型 ---"), "");
+        m_modelSelector->addItem(QString("本地: %1").arg(QFileInfo(m_settingsModel->modelPath()).fileName()));
+    }
+
+    // 恢复之前选择的模型
+    int index = -1;
+
+    // 先尝试通过modelName匹配
+    if (!m_settingsModel->currentModelName().isEmpty()) {
+        index = m_modelSelector->findData(m_settingsModel->currentModelName());
+        if (index < 0) {
+            // 如果找不到，尝试通过显示文本匹配
+            QString modelName = m_settingsModel->currentModelName();
+            for (int i = 0; i < m_modelSelector->count(); i++) {
+                QString itemText = m_modelSelector->itemText(i);
+                if (itemText.contains(modelName, Qt::CaseInsensitive)) {
+                    index = i;
+                    break;
+                }
+            }
+        }
+    }    // 阻止信号触发，避免在恢复选择时触发onModelSelectionChanged
+    m_modelSelector->blockSignals(true);
+
+    // 如果找到了匹配的选项，设置为当前选择
+    if (index >= 0) {
+        m_modelSelector->setCurrentIndex(index);
+    }
+    // 否则选择第一个有效的模型（跳过分类标题）
+    else {
+        for (int i = 0; i < m_modelSelector->count(); i++) {
+            if (!m_modelSelector->itemData(i).toString().isEmpty() &&
+                !m_modelSelector->itemText(i).startsWith("---")) {
+                m_modelSelector->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+
+    // 恢复信号连接
+    m_modelSelector->blockSignals(false);
+
+    LOG_INFO(QString("模型列表更新完成，当前选择: %1").arg(m_modelSelector->currentText()));
+}
+
+void MainWindow::onModelSelectionChanged(int index)
+{
+    // 如果正在更新列表，忽略选择变化
+    static bool isUpdating = false;
+    if (isUpdating) {
+        return;
+    }
+
+    // 获取选择的模型数据
+    QString modelName = m_modelSelector->currentData().toString();
+    QString displayName = m_modelSelector->currentText();
+
+    // 如果是分类标题（data为空），或者是分隔符，忽略此次选择
+    if (modelName.isEmpty() || displayName.startsWith("---")) {
+        LOG_INFO("忽略分类标题选择");
+
+        // 标记开始更新
+        isUpdating = true;
+        // 恢复到之前的有效选择
+        QString lastValidModel = m_settingsModel->currentModelName();
+        int validIndex = -1;
+
+        // 首先尝试通过modelName匹配
+        if (!lastValidModel.isEmpty()) {
+            validIndex = m_modelSelector->findData(lastValidModel);
+        }
+
+        // 如果没找到，尝试找到第一个有效的模型
+        if (validIndex < 0) {
+            for (int i = 0; i < m_modelSelector->count(); i++) {
+                QString itemData = m_modelSelector->itemData(i).toString();
+                QString itemText = m_modelSelector->itemText(i);
+                if (!itemData.isEmpty() && !itemText.startsWith("---")) {
+                    validIndex = i;
+                    break;
+                }
+            }
+        }
+
+        // 如果找到了有效索引，设置它
+        if (validIndex >= 0) {
+            m_modelSelector->setCurrentIndex(validIndex);
+        }
+
+        // 标记更新结束
+        isUpdating = false;
+        return;
+    }
+
+    // 如果是有效选择，使用modelName或displayName
+    if (modelName.isEmpty()) {
+        modelName = displayName;
+    }
+
+    // 判断模型类型
+    bool isApiModel = !displayName.startsWith("Ollama:") && !displayName.startsWith("本地:");
+
+    // 检查API配置
+    if (isApiModel && m_settingsModel->apiKey().isEmpty()) {
+        showError(tr("配置错误"), tr("请先在设置中配置API密钥"));
+
+        // 恢复到之前的选择
+        isUpdating = true;
+        refreshModelList();
+        isUpdating = false;
+        return;
+    }
+
+    // 设置模型类型
+    if (displayName.startsWith("Ollama:")) {
+        m_settingsModel->setModelType(SettingsModel::ModelType::Ollama);
+    } else if (displayName.startsWith("本地:")) {
+        m_settingsModel->setModelType(SettingsModel::ModelType::Local);
+    } else {
+        m_settingsModel->setModelType(SettingsModel::ModelType::API);
+    }
+
+    // 更新当前模型
+    m_settingsModel->setCurrentModelName(modelName);
+    LOG_INFO(QString("切换到模型: %1").arg(modelName));
+
+    // 创建新的LLMService
+    LLMService* service = m_settingsViewModel->createLLMService();
+    if (!service) {
+        showError(tr("错误"), tr("无法初始化选中的模型，请检查设置"));
+        // 恢复到之前的选择
+        isUpdating = true;
+        refreshModelList();
+        isUpdating = false;
+        return;
+    }
+
+    // 设置新的服务
+    m_chatViewModel->setLLMService(service);
+    updateStatusBar();
 }
 
 void MainWindow::saveSettings()
@@ -216,24 +397,6 @@ void MainWindow::saveSettings()
     // 保存设置
     m_settingsModel->saveSettings();
     LOG_INFO("设置保存完成");
-}
-
-void MainWindow::updateModelLabel(const QString& modelName)
-{
-    QString modelType;
-    switch (SettingsModel::instance().modelType()) {
-        case SettingsModel::ModelType::API:
-            modelType = tr("API");
-            break;
-        case SettingsModel::ModelType::Ollama:
-            modelType = tr("Ollama");
-            break;
-        case SettingsModel::ModelType::Local:
-            modelType = tr("本地模型");
-            break;
-    }
-
-    m_modelLabel->setText(tr("当前模型: %1 (%2)").arg(modelName, modelType));
 }
 
 void MainWindow::updateStatusBar()
@@ -251,7 +414,10 @@ void MainWindow::updateStatusBar()
             break;
     }
 
-    QString status = tr("就绪 | 当前模型: %1").arg(SettingsModel::instance().currentModelName());
+    QString status = tr("状态: 就绪 | %1").arg(modelType);
+    if (m_modelSelector && m_modelSelector->currentText().contains("---")) {
+        status = tr("请选择一个模型");
+    }
     m_statusLabel->setText(status);
 }
 
@@ -280,9 +446,8 @@ void MainWindow::onClearChat()
 
 void MainWindow::onOpenSettings()
 {
-    SettingsDialog dialog(&SettingsModel::instance(), this);
-    if (dialog.exec() == QDialog::Accepted) {
-        updateModelLabel(m_settingsModel->currentModelName());
+    SettingsDialog dialog(&SettingsModel::instance(), this);    if (dialog.exec() == QDialog::Accepted) {
+        refreshModelList();
         LOG_INFO("设置已更新");
     }
 }

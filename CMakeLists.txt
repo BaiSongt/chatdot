@@ -10,7 +10,7 @@ set(CMAKE_AUTOUIC ON)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-find_package(Qt6 REQUIRED COMPONENTS 
+find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Widgets
@@ -61,6 +61,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # 设置包含目录
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
 )
 
 # 设置输出目录
@@ -71,4 +72,4 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # 安装目标
 install(TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION bin
-) 
+)

@@ -30,30 +30,61 @@ QString SettingsModel::getSettingsPath() const
 
 void SettingsModel::loadSettings()
 {
-    QSettings settings;
+    QFile file(getSettingsPath());
+    if (!file.exists()) {
+        // 如果文件不存在，使用默认值
+        m_modelType = ModelType::API;
+        m_apiKey = "";
+        m_apiUrl = "https://api.openai.com/v1/chat/completions";
+        m_currentModelName = "gpt-3.5-turbo";
+        return;
+    }
 
-    // 加载模型类型
-    m_modelType = static_cast<ModelType>(settings.value("modelType", 0).toInt());
+    if (!file.open(QIODevice::ReadOnly)) {
+        LOG_ERROR("无法打开配置文件");
+        return;
+    }
 
-    // 加载API设置
-    m_apiKey = settings.value("apiKey").toString();
-    m_apiUrl = settings.value("apiUrl", "https://api.openai.com/v1/chat/completions").toString();
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
 
-    // 根据不同的模型类型加载相应的设置
+    if (!doc.isObject()) {
+        LOG_ERROR("配置文件格式无效");
+        return;
+    }
+
+    QJsonObject obj = doc.object();
+
+    // 加载并解密 API 密钥
+    if (obj.contains("apiKey")) {
+        QString encryptedKey = obj["apiKey"].toString();
+        m_apiKey = Encryption::decrypt(encryptedKey);
+    }    // 加载其他设置
+    m_modelType = static_cast<ModelType>(obj.value("modelType").toInt(0));
+    m_apiUrl = obj.value("apiUrl").toString("https://api.openai.com/v1/chat/completions");
+    m_currentModelName = obj.value("currentModel").toString();
+    m_modelPath = obj.value("modelPath").toString();
+
+    // 发送 API URL 变更信号
+    emit apiUrlChanged();
+
+    // 根据不同的模型类型设置默认值
     switch (m_modelType) {
         case ModelType::API:
-            m_currentModelName = settings.value("apiModel", "gpt-3.5-turbo").toString();
+            if (m_currentModelName.isEmpty()) {
+                m_currentModelName = obj.value("apiModel").toString("gpt-3.5-turbo");
+            }
             break;
 
         case ModelType::Ollama:
-            // 先刷新模型列表
-            m_currentModelName = settings.value("ollamaModel").toString();
+            if (m_currentModelName.isEmpty()) {
+                m_currentModelName = obj.value("ollamaModel").toString();
+            }
             refreshOllamaModels();
             break;
 
         case ModelType::Local:
-            m_modelPath = settings.value("localModelPath").toString();
-            if (!m_modelPath.isEmpty()) {
+            if (!m_modelPath.isEmpty() && m_currentModelName.isEmpty()) {
                 m_currentModelName = QFileInfo(m_modelPath).fileName();
             }
             break;
@@ -69,15 +100,34 @@ void SettingsModel::loadSettings()
 
 void SettingsModel::saveSettings()
 {
-    QSettings settings;
+    QJsonObject obj;
 
-    settings.setValue("modelType", static_cast<int>(m_modelType));
-    settings.setValue("apiKey", m_apiKey);
-    settings.setValue("currentModel", m_currentModelName);
-    settings.setValue("apiUrl", m_apiUrl);
-    settings.setValue("modelPath", m_modelPath);
+    // 加密并保存 API 密钥
+    QString encryptedKey = Encryption::encrypt(m_apiKey);
+    obj["apiKey"] = encryptedKey;
 
-    settings.sync();
+    // 保存其他设置
+    obj["modelType"] = static_cast<int>(m_modelType);
+    obj["currentModel"] = m_currentModelName;
+    obj["apiUrl"] = m_apiUrl;
+    obj["modelPath"] = m_modelPath;
+
+    QJsonDocument doc(obj);
+
+    // 确保目录存在
+    QFileInfo fileInfo(getSettingsPath());
+    QDir().mkpath(fileInfo.absolutePath());
+
+    // 保存到文件
+    QFile file(getSettingsPath());
+    if (!file.open(QIODevice::WriteOnly)) {
+        LOG_ERROR("无法保存配置文件");
+        return;
+    }
+
+    file.write(doc.toJson());
+    file.close();
+
     LOG_INFO("设置保存完成");
 }
 

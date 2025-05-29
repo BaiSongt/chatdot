@@ -2,10 +2,10 @@
 #define SETTINGSVIEWMODEL_H
 
 #include <QObject>
-#include <QSettings>
 #include <QString>
 #include "models/settingsmodel.h"
 #include "services/llmservice.h"
+#include "utils/encryption.h"
 
 class SettingsViewModel : public QObject
 {
@@ -25,7 +25,6 @@ signals:
 
 private:
     SettingsModel* m_model;
-    QSettings m_settings;
 };
 
-#endif // SETTINGSVIEWMODEL_H 
+#endif // SETTINGSVIEWMODEL_H

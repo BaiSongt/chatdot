@@ -4,7 +4,13 @@
 #include <QObject>
 #include <QString>
 #include <QJsonObject>
+#include <QJsonDocument>
 #include <QStringList>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include "utils/encryption.h"
 
 class SettingsModel : public QObject
 {

@@ -8,14 +8,13 @@
 SettingsViewModel::SettingsViewModel(SettingsModel* model, QObject *parent)
     : QObject(parent)
     , m_model(model)
-    , m_settings("ChatDot", "Settings")
 {
-    loadSettings();
     // 监听设置变化
     connect(m_model, &SettingsModel::modelTypeChanged, this, &SettingsViewModel::settingsChanged);
     connect(m_model, &SettingsModel::currentModelNameChanged, this, &SettingsViewModel::settingsChanged);
     connect(m_model, &SettingsModel::apiKeyChanged, this, &SettingsViewModel::settingsChanged);
     connect(m_model, &SettingsModel::modelPathChanged, this, &SettingsViewModel::settingsChanged);
+    connect(m_model, &SettingsModel::apiUrlChanged, this, &SettingsViewModel::settingsChanged);
 }
 
 SettingsViewModel::~SettingsViewModel()
@@ -25,21 +24,13 @@ SettingsViewModel::~SettingsViewModel()
 
 void SettingsViewModel::saveSettings()
 {
-    m_settings.setValue("apiKey", m_model->apiKey());
-    m_settings.setValue("modelPath", m_model->modelPath());
-    m_settings.setValue("modelType", static_cast<int>(m_model->modelType()));
-    m_settings.setValue("currentModelName", m_model->currentModelName());
-    m_settings.sync();
+    m_model->saveSettings();
     emit settingsChanged();
 }
 
 void SettingsViewModel::loadSettings()
 {
-    m_model->setApiKey(m_settings.value("apiKey").toString());
-    m_model->setModelPath(m_settings.value("modelPath").toString());
-    m_model->setModelType(static_cast<SettingsModel::ModelType>(
-        m_settings.value("modelType", 0).toInt()));
-    m_model->setCurrentModelName(m_settings.value("currentModelName").toString());
+    m_model->loadSettings();
 }
 
 LLMService* SettingsViewModel::createLLMService()

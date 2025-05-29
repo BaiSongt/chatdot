@@ -58,4 +58,7 @@ void ChatViewModel::setLLMService(LLMService* service)
         delete m_llmService;
     }
     m_llmService = service;
-} 
+    if (!m_llmService) {
+        emit errorOccurred("无法创建AI模型服务");
+    }
+}

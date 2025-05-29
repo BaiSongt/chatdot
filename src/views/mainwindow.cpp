@@ -187,13 +187,27 @@ void MainWindow::setupConnections()
     // 连接设置模型的信号
     connect(&SettingsModel::instance(), &SettingsModel::currentModelNameChanged,
             this, &MainWindow::updateModelLabel);
+
+    // 连接设置改变信号，更新LLMService
+    connect(m_settingsViewModel, &SettingsViewModel::settingsChanged,
+            this, [this]() {
+                LLMService* service = m_settingsViewModel->createLLMService();
+                m_chatViewModel->setLLMService(service);
+            });
 }
 
 void MainWindow::loadSettings()
 {
     // 确保设置已加载
     m_settingsModel->loadSettings();
+
+    // 更新模型标签
     updateModelLabel(m_settingsModel->currentModelName());
+
+    // 创建并设置LLMService
+    LLMService* service = m_settingsViewModel->createLLMService();
+    m_chatViewModel->setLLMService(service);
+
     LOG_INFO("设置加载完成");
 }
 

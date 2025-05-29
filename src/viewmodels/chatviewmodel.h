@@ -22,14 +22,17 @@ signals:
     void responseReceived(const QString& response);
     void errorOccurred(const QString& error);
 
+public slots:
+    void setLLMService(LLMService* service);
+
 private slots:
     void handleResponse(const QString& response);
     void handleError(const QString& error);
-    void setLLMService(LLMService* service);
+
 
 private:
     ChatModel* m_model;
     LLMService* m_llmService;
 };
 
-#endif // CHATVIEWMODEL_H 
+#endif // CHATVIEWMODEL_H

@@ -40,4 +40,4 @@ bool LocalModelService::isAvailable() const
 QString LocalModelService::getModelName() const
 {
     return m_modelPath.isEmpty() ? "Local Model" : m_modelPath;
-} 
+}

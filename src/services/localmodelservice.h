@@ -10,6 +10,7 @@ class LocalModelService : public LLMService
     Q_OBJECT
 
 public:
+
     explicit LocalModelService(const QString& modelPath, QObject *parent = nullptr);
     ~LocalModelService() override;
 
@@ -22,4 +23,4 @@ private:
     // TODO: Add local model related members (e.g., ONNX Runtime session, model object)
 };
 
-#endif // LOCALMODELSERVICE_H 
+#endif // LOCALMODELSERVICE_H

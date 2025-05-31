@@ -110,3 +110,10 @@ void ChatViewModel::setLLMService(LLMService* service)
         emit errorOccurred("无法创建AI模型服务");
     }
 }
+
+void ChatViewModel::clearChat()
+{
+    // 清空聊天模型中的消息
+    m_model->clearMessages();
+    LOG_INFO("聊天记录已清除");
+}

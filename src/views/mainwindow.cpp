@@ -450,3 +450,166 @@ void MainWindow::updateSendButton(bool isGenerating)
     }
     m_messageInput->setEnabled(!isGenerating);
 }
+
+void MainWindow::onClearChat()
+{
+    // 清空聊天显示区域
+    m_chatDisplay->clear();
+    LOG_INFO("聊天记录已清除");
+}
+
+void MainWindow::onOpenSettings()
+{
+    // 创建并显示设置对话框
+    SettingsDialog dialog(m_settingsModel, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        // 如果设置被修改，刷新模型列表
+        refreshModelList();
+        LOG_INFO("设置已更新");
+    }
+}
+
+void MainWindow::onSaveChat()
+{
+    // 获取保存文件的路径
+    QString filePath = QFileDialog::getSaveFileName(this,
+        tr("保存聊天记录"),
+        QDir::homePath(),
+        tr("文本文件 (*.txt);;所有文件 (*.*)"));
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    // 打开文件并保存聊天内容
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << m_chatDisplay->toPlainText();
+        file.close();
+        LOG_INFO(QString("聊天记录已保存到: %1").arg(filePath));
+    } else {
+        showError(tr("保存失败"), tr("无法保存聊天记录到文件"));
+    }
+}
+
+void MainWindow::onLoadChat()
+{
+    // 获取要加载的文件路径
+    QString filePath = QFileDialog::getOpenFileName(this,
+        tr("加载聊天记录"),
+        QDir::homePath(),
+        tr("文本文件 (*.txt);;所有文件 (*.*)"));
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    // 打开文件并读取内容
+    QFile file(filePath);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        m_chatDisplay->setPlainText(in.readAll());
+        file.close();
+        LOG_INFO(QString("已加载聊天记录: %1").arg(filePath));
+    } else {
+        showError(tr("加载失败"), tr("无法从文件加载聊天记录"));
+    }
+}
+
+void MainWindow::onAbout()
+{
+    // 显示关于对话框
+    QMessageBox::about(this,
+        tr("关于 ChatDot"),
+        tr("ChatDot - AI聊天助手\n\n"
+           "版本: 1.0.0\n"
+           "一个简单而强大的AI聊天应用程序。\n\n"
+           "支持多种AI模型，包括：\n"
+           "- OpenAI API\n"
+           "- Deepseek API\n"
+           "- Ollama本地模型\n"
+           "- 本地模型"));
+}
+
+void MainWindow::onError(const QString& error)
+{
+    showError(tr("错误"), error);
+}
+
+void MainWindow::onLogMessage(Logger::Level level, const QString& message)
+{
+    // 根据日志级别设置不同的颜色
+    QString color;
+    switch (level) {
+        case Logger::Level::Debug:
+            color = "gray";
+            break;
+        case Logger::Level::Info:
+            color = "black";
+            break;
+        case Logger::Level::Warning:
+            color = "orange";
+            break;
+        case Logger::Level::Error:
+            color = "red";
+            break;
+        default:
+            color = "black";
+    }
+
+    // 在状态栏显示日志消息
+    if (m_statusLabel) {
+        m_statusLabel->setText(QString("<span style='color: %1'>%2</span>")
+            .arg(color)
+            .arg(message));
+    }
+}
+
+void MainWindow::updateStatusBar()
+{
+    // 更新状态栏信息
+    QString status;
+    if (m_isGenerating) {
+        status = tr("正在生成回复...");
+    } else {
+        status = tr("就绪");
+    }
+
+    if (m_statusLabel) {
+        m_statusLabel->setText(status);
+    }
+}
+
+void MainWindow::selectImage()
+{
+    // 获取要上传的图片路径
+    QString filePath = QFileDialog::getOpenFileName(this,
+        tr("选择图片"),
+        QDir::homePath(),
+        tr("图片文件 (*.png *.jpg *.jpeg *.bmp *.gif);;所有文件 (*.*)"));
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    // 加载图片
+    QImage image(filePath);
+    if (image.isNull()) {
+        showError(tr("错误"), tr("无法加载图片"));
+        return;
+    }
+
+    // 将图片添加到聊天显示区域
+    m_chatDisplay->append(tr("<p><b>用户:</b> [图片]</p>"));
+    m_chatDisplay->append(tr("<p><img src='%1' width='300'/></p>").arg(filePath));
+
+    // 处理图片（这里可以添加图片处理逻辑）
+    LOG_INFO(QString("已选择图片: %1").arg(filePath));
+}
+
+void MainWindow::showError(const QString& title, const QString& message)
+{
+    QMessageBox::critical(this, title, message);
+    LOG_ERROR(message);
+}

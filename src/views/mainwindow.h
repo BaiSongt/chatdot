@@ -69,6 +69,7 @@ private:
 
     // UI Components
     QWidget* m_centralWidget;
+    QVBoxLayout* m_mainLayout;
     QTextEdit* m_chatDisplay;
     QLineEdit* m_messageInput;
     QPushButton* m_sendButton;

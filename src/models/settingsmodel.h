@@ -231,6 +231,16 @@ private:
     void updateConfiguredModelsForType(const QString& type, QJsonArray& models);
     void addModelToConfiguredList(const QString& type, const QString& modelName, const QString& provider = QString());
     void logConfiguredModelsSummary();
+
+    // 设置加载相关函数
+    bool loadConfigFile(QJsonObject& root);
+    void loadModelConfig(const QJsonObject& root);
+    void loadConfiguredModels(const QJsonObject& root);
+    void loadBasicSettings(const QJsonObject& root);
+    void loadModelSpecificSettings();
+    void loadAPIModelSettings();
+    void loadOllamaModelSettings();
+    void loadLocalModelSettings();
 };
 
 #endif // SETTINGSMODEL_H

@@ -599,26 +599,23 @@ QString SettingsModel::getCurrentApiUrl() const
     return QString();
 }
 
-void SettingsModel::loadSettings()
+bool SettingsModel::loadConfigFile(QJsonObject& root)
 {
     QString settingsPath = getSettingsPath();
     if (settingsPath.isEmpty()) {
         LOG_ERROR("无法获取设置文件路径");
-        setDefaultSettings();
-        return;
+        return false;
     }
 
     QFile file(settingsPath);
     if (!file.exists()) {
         LOG_INFO("设置文件不存在，使用默认值");
-        setDefaultSettings();
-        return;
+        return false;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
         LOG_ERROR(QString("无法打开配置文件: %1").arg(settingsPath));
-        setDefaultSettings();
-        return;
+        return false;
     }
 
     QByteArray data = file.readAll();
@@ -627,13 +624,15 @@ void SettingsModel::loadSettings()
     QJsonDocument doc = QJsonDocument::fromJson(data);
     if (doc.isNull()) {
         LOG_ERROR("配置文件格式错误");
-        setDefaultSettings();
-        return;
+        return false;
     }
 
-    QJsonObject root = doc.object();
-    
-    // 加载模型配置
+    root = doc.object();
+    return true;
+}
+
+void SettingsModel::loadModelConfig(const QJsonObject& root)
+{
     if (root.contains("models_config")) {
         m_models_config = root["models_config"].toObject();
         LOG_INFO("已加载模型配置");
@@ -663,8 +662,10 @@ void SettingsModel::loadSettings()
         LOG_INFO("未找到模型配置，使用默认配置");
         initializeDefaultModels();
     }
+}
 
-    // 加载已配置的模型列表
+void SettingsModel::loadConfiguredModels(const QJsonObject& root)
+{
     if (root.contains("configured_models")) {
         m_configuredModels = root["configured_models"].toObject();
         LOG_INFO("已加载配置的模型列表");
@@ -680,8 +681,10 @@ void SettingsModel::loadSettings()
     } else {
         updateConfiguredModels();
     }
+}
 
-    // 加载基本设置
+void SettingsModel::loadBasicSettings(const QJsonObject& root)
+{
     if (root.contains("appState")) {
         QJsonObject appState = root["appState"].toObject();
         if (appState.contains("lastModelType")) {
@@ -691,92 +694,6 @@ void SettingsModel::loadSettings()
         if (appState.contains("lastSelectedModel")) {
             m_currentModelName = appState["lastSelectedModel"].toString();
             LOG_INFO(QString("已加载上次选择的模型: %1").arg(m_currentModelName));
-        }
-    }
-
-    // 根据不同的模型类型设置默认值
-    switch (m_modelType) {
-        case ModelType::API: {
-            // 如果没有选择模型，尝试从配置的模型列表中选择第一个
-            if (m_currentModelName.isEmpty() && m_configuredModels.contains("api")) {
-                QJsonArray apiModels = m_configuredModels["api"].toArray();
-                if (!apiModels.isEmpty()) {
-                    m_currentModelName = apiModels.first().toString();
-                    LOG_INFO(QString("自动选择第一个API模型: %1").arg(m_currentModelName));
-                }
-            }
-            
-            // 从模型配置中获取提供商和 API URL
-            if (!m_currentModelName.isEmpty()) {
-                QJsonObject apiConfig = m_models_config["api"].toObject();
-                bool found = false;
-                
-                for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
-                    if (providerIt.value().isObject()) {
-                        QJsonObject providerConfig = providerIt.value().toObject();
-                        if (providerConfig.contains("models")) {
-                            QJsonObject models = providerConfig["models"].toObject();
-                            if (models.contains(m_currentModelName)) {
-                                m_currentProvider = providerIt.key();
-                                m_apiKey = providerConfig["api_key"].toString();
-                                m_apiUrl = providerConfig["default_url"].toString();
-                                
-                                // 如果模型配置中有特定的 URL，使用模型的 URL
-                                QJsonObject modelConfig = models[m_currentModelName].toObject();
-                                if (modelConfig.contains("url") && !modelConfig["url"].toString().isEmpty()) {
-                                    m_apiUrl = modelConfig["url"].toString();
-                                }
-                                
-                                LOG_INFO(QString("已加载模型配置 - 提供商: %1, API Key: %2, API URL: %3")
-                                    .arg(m_currentProvider)
-                                    .arg(m_apiKey.isEmpty() ? "未设置" : "已设置")
-                                    .arg(m_apiUrl));
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                if (!found) {
-                    LOG_ERROR(QString("未找到模型 %1 的配置").arg(m_currentModelName));
-                }
-            }
-            break;
-        }
-        case ModelType::Ollama: {
-            if (m_currentModelName.isEmpty() && m_configuredModels.contains("ollama")) {
-                QJsonArray ollamaModels = m_configuredModels["ollama"].toArray();
-                if (!ollamaModels.isEmpty()) {
-                    m_currentModelName = ollamaModels.first().toString();
-                    LOG_INFO(QString("自动选择第一个Ollama模型: %1").arg(m_currentModelName));
-                }
-            }
-            // 获取 Ollama 配置
-            QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
-            m_ollamaUrl = ollamaConfig["default_url"].toString();
-            LOG_INFO(QString("已加载Ollama配置 - URL: %1").arg(m_ollamaUrl));
-            break;
-        }
-        case ModelType::Local: {
-            if (m_currentModelName.isEmpty() && m_configuredModels.contains("local")) {
-                QJsonArray localModels = m_configuredModels["local"].toArray();
-                if (!localModels.isEmpty()) {
-                    m_currentModelName = localModels.first().toString();
-                    LOG_INFO(QString("自动选择第一个本地模型: %1").arg(m_currentModelName));
-                }
-            }
-            // 从模型配置中获取模型路径
-            if (!m_currentModelName.isEmpty()) {
-                QJsonObject config = getModelConfig("local", m_currentModelName);
-                if (!config.isEmpty()) {
-                    m_modelPath = config["path"].toString();
-                    LOG_INFO(QString("已加载本地模型配置 - 路径: %1").arg(m_modelPath));
-                } else {
-                    LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
-                }
-            }
-            break;
         }
     }
 
@@ -826,6 +743,120 @@ void SettingsModel::loadSettings()
     if (!m_proxyPassword.isEmpty()) {
         m_proxyPassword = root["proxyPassword"].toString();
     }
+}
+
+void SettingsModel::loadModelSpecificSettings()
+{
+    switch (m_modelType) {
+        case ModelType::API:
+            loadAPIModelSettings();
+            break;
+        case ModelType::Ollama:
+            loadOllamaModelSettings();
+            break;
+        case ModelType::Local:
+            loadLocalModelSettings();
+            break;
+    }
+}
+
+void SettingsModel::loadAPIModelSettings()
+{
+    // 如果没有选择模型，尝试从配置的模型列表中选择第一个
+    if (m_currentModelName.isEmpty() && m_configuredModels.contains("api")) {
+        QJsonArray apiModels = m_configuredModels["api"].toArray();
+        if (!apiModels.isEmpty()) {
+            m_currentModelName = apiModels.first().toString();
+            LOG_INFO(QString("自动选择第一个API模型: %1").arg(m_currentModelName));
+        }
+    }
+    
+    // 从模型配置中获取提供商和 API URL
+    if (!m_currentModelName.isEmpty()) {
+        QJsonObject apiConfig = m_models_config["api"].toObject();
+        bool found = false;
+        
+        for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+            if (providerIt.value().isObject()) {
+                QJsonObject providerConfig = providerIt.value().toObject();
+                if (providerConfig.contains("models")) {
+                    QJsonObject models = providerConfig["models"].toObject();
+                    if (models.contains(m_currentModelName)) {
+                        m_currentProvider = providerIt.key();
+                        m_apiKey = providerConfig["api_key"].toString();
+                        m_apiUrl = providerConfig["default_url"].toString();
+                        
+                        // 如果模型配置中有特定的 URL，使用模型的 URL
+                        QJsonObject modelConfig = models[m_currentModelName].toObject();
+                        if (modelConfig.contains("url") && !modelConfig["url"].toString().isEmpty()) {
+                            m_apiUrl = modelConfig["url"].toString();
+                        }
+                        
+                        LOG_INFO(QString("已加载模型配置 - 提供商: %1, API Key: %2, API URL: %3")
+                            .arg(m_currentProvider)
+                            .arg(m_apiKey.isEmpty() ? "未设置" : "已设置")
+                            .arg(m_apiUrl));
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!found) {
+            LOG_ERROR(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+        }
+    }
+}
+
+void SettingsModel::loadOllamaModelSettings()
+{
+    if (m_currentModelName.isEmpty() && m_configuredModels.contains("ollama")) {
+        QJsonArray ollamaModels = m_configuredModels["ollama"].toArray();
+        if (!ollamaModels.isEmpty()) {
+            m_currentModelName = ollamaModels.first().toString();
+            LOG_INFO(QString("自动选择第一个Ollama模型: %1").arg(m_currentModelName));
+        }
+    }
+    // 获取 Ollama 配置
+    QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
+    m_ollamaUrl = ollamaConfig["default_url"].toString();
+    LOG_INFO(QString("已加载Ollama配置 - URL: %1").arg(m_ollamaUrl));
+}
+
+void SettingsModel::loadLocalModelSettings()
+{
+    if (m_currentModelName.isEmpty() && m_configuredModels.contains("local")) {
+        QJsonArray localModels = m_configuredModels["local"].toArray();
+        if (!localModels.isEmpty()) {
+            m_currentModelName = localModels.first().toString();
+            LOG_INFO(QString("自动选择第一个本地模型: %1").arg(m_currentModelName));
+        }
+    }
+    // 从模型配置中获取模型路径
+    if (!m_currentModelName.isEmpty()) {
+        QJsonObject config = getModelConfig("local", m_currentModelName);
+        if (!config.isEmpty()) {
+            m_modelPath = config["path"].toString();
+            LOG_INFO(QString("已加载本地模型配置 - 路径: %1").arg(m_modelPath));
+        } else {
+            LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+        }
+    }
+}
+
+void SettingsModel::loadSettings()
+{
+    QJsonObject root;
+    if (!loadConfigFile(root)) {
+        setDefaultSettings();
+        return;
+    }
+
+    loadModelConfig(root);
+    loadConfiguredModels(root);
+    loadBasicSettings(root);
+    loadModelSpecificSettings();
 
     LOG_INFO(QString("设置加载完成 - 当前配置:")
              .arg(static_cast<int>(m_modelType))

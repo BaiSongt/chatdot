@@ -341,152 +341,106 @@ void MainWindow::loadSettings()
     }
 }
 
-void MainWindow::refreshModelList()
-{
-    LOG_INFO("开始刷新模型列表...");
-    
-    // 如果当前类型是Ollama，先刷新模型列表
-    if (m_settingsModel->modelType() == SettingsModel::ModelType::Ollama) {
-        m_settingsModel->refreshOllamaModels();
-    }
-
-    // 更新模型列表
-    updateModelList();
-
-    // 根据当前选择的模型创建服务
-    QString currentModel = m_settingsModel->currentModelName();
-    if (!currentModel.isEmpty()) {
-        // 获取当前模型的配置
-        QString modelType = m_settingsModel->modelType() == SettingsModel::ModelType::API ? "api" :
-                          m_settingsModel->modelType() == SettingsModel::ModelType::Ollama ? "ollama" : "local";
-        
-        QJsonObject config = m_settingsModel->getModelConfig(modelType, currentModel);
-        LOG_INFO(QString("获取到模型配置 - 类型: %1, 模型: %2").arg(modelType).arg(currentModel));
-
-        // 如果是 API 类型，确保设置了 API URL
-        if (m_settingsModel->modelType() == SettingsModel::ModelType::API) {
-            QString apiUrl = config["url"].toString();
-            if (!apiUrl.isEmpty()) {
-                LOG_INFO(QString("从配置中获取到 API URL: %1").arg(apiUrl));
-                m_settingsModel->setApiUrl(apiUrl);
-            } else {
-                // 尝试从当前设置中获取
-                apiUrl = m_settingsModel->apiUrl();
-                if (!apiUrl.isEmpty()) {
-                    LOG_INFO(QString("从当前设置中获取到 API URL: %1").arg(apiUrl));
-                } else {
-                    LOG_ERROR("API URL 为空，无法创建服务");
-                    return;
-                }
-            }
-        }
-
-        LOG_INFO(QString("准备创建模型服务 - 类型: %1, 模型: %2, API URL: %3")
-            .arg(static_cast<int>(m_settingsModel->modelType()))
-            .arg(currentModel)
-            .arg(m_settingsModel->apiUrl()));
-
-        // 先清理当前的服务
-        if (m_chatViewModel) {
-            LOG_INFO("清理当前服务...");
-            m_chatViewModel->setLLMService(nullptr);
-        }
-
-        // 创建新的LLMService
-        LLMService* service = m_settingsViewModel->createLLMService();
-        if (service) {
-            m_chatViewModel->setLLMService(service);
-            LOG_INFO(QString("成功创建并设置模型服务: %1").arg(currentModel));
-            
-            // 验证服务是否正确设置
-            if (m_chatViewModel->hasLLMService()) {
-                LOG_INFO(QString("服务已正确设置到 ChatViewModel，当前服务状态: %1")
-                    .arg(m_chatViewModel->getServiceStatus()));
-            } else {
-                LOG_ERROR("服务设置到 ChatViewModel 失败");
-            }
-        } else {
-            LOG_ERROR(QString("创建模型服务失败: %1").arg(currentModel));
-        }
-    } else {
-        LOG_WARNING("当前没有选择模型，跳过服务创建");
-    }
-    
-    LOG_INFO("模型列表刷新完成");
-}
-
 void MainWindow::updateModelList()
 {
-    LOG_INFO("更新模型列表");
+    LOG_INFO("开始更新模型列表");
     
     // 阻止信号触发，避免在更新时触发 onModelSelectionChanged
     m_modelSelector->blockSignals(true);
     
-    QString currentModel = m_modelSelector->currentText();
+    // 保存当前选择的模型
+    QString currentModel = m_settingsModel->currentModelName();
     m_modelSelector->clear();
 
-    // 根据当前设置的类型显示对应的模型
+    // 获取当前类型下已配置的模型列表
+    QStringList availableModels;
+    QString modelType;
+    
+    // 根据当前模型类型获取配置
     switch (m_settingsModel->modelType()) {
-        case SettingsModel::ModelType::API: {
-            QStringList apiModels = m_settingsModel->getAvailableModels("api");
-            for (const QString& modelName : apiModels) {
-                QJsonObject config = m_settingsModel->getModelConfig("api", modelName);
-                if (config["enabled"].toBool(true)) {
-                    QString displayName = QString("%1: %2")
-                        .arg(config["provider"].toString("OpenAI"))
-                        .arg(config["name"].toString(modelName));
-                    m_modelSelector->addItem(displayName, modelName);
-                }
-            }
+        case SettingsModel::ModelType::API:
+            modelType = "api";
             break;
-        }
-        case SettingsModel::ModelType::Ollama: {
-            QStringList ollamaModels = m_settingsModel->ollamaModels();
-            if (!ollamaModels.isEmpty()) {
-                for (const QString& model : ollamaModels) {
-                    QJsonObject config = m_settingsModel->getModelConfig("ollama", model);
-                    if (config["enabled"].toBool(true)) {
-                        QString displayName = QString("Ollama: %1").arg(model);
-                        m_modelSelector->addItem(displayName, model);
-                    }
-                }
-            } else {
-                m_modelSelector->addItem(tr("无可用模型"), "");
-            }
+        case SettingsModel::ModelType::Ollama:
+            modelType = "ollama";
             break;
-        }
-        case SettingsModel::ModelType::Local: {
-            QStringList localModels = m_settingsModel->getAvailableModels("local");
-            if (!localModels.isEmpty()) {
-                for (const QString& model : localModels) {
-                    QJsonObject config = m_settingsModel->getModelConfig("local", model);
-                    if (config["enabled"].toBool(true)) {
-                        QString displayName = QString("本地: %1").arg(config["name"].toString(model));
-                        m_modelSelector->addItem(displayName, model);
-                    }
-                }
-            } else {
-                m_modelSelector->addItem(tr("无可用模型"), "");
-            }
+        case SettingsModel::ModelType::Local:
+            modelType = "local";
             break;
-        }
         default:
-            m_modelSelector->addItem(tr("无可用模型"), "");
+            LOG_WARNING("未知的模型类型");
             break;
+    }
+
+    // 获取已配置的模型列表
+    availableModels = m_settingsModel->getConfiguredModels(modelType);
+    LOG_INFO(QString("获取到 %1 类型已配置的模型列表，共 %2 个模型").arg(modelType).arg(availableModels.size()));
+
+    // 根据不同类型处理模型列表
+    if (modelType == "api") {
+        // 处理 API 模型
+        QJsonObject apiConfig = m_settingsModel->getModelConfig("api", "");
+        for (const QString& modelName : availableModels) {
+            // 遍历所有提供商查找模型
+            for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+                if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
+                    providerIt.value().isObject()) {
+                    QString provider = providerIt.key();
+                    QJsonObject providerConfig = providerIt.value().toObject();
+                    if (providerConfig.contains("models")) {
+                        QJsonObject models = providerConfig["models"].toObject();
+                        if (models.contains(modelName)) {
+                            QJsonObject modelConfig = models[modelName].toObject();
+                            QString displayName = QString("%1: %2")
+                                .arg(provider)
+                                .arg(modelConfig["name"].toString(modelName));
+                            m_modelSelector->addItem(displayName, modelName);
+                            LOG_INFO(QString("添加 API 模型: %1").arg(displayName));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    } else if (modelType == "ollama") {
+        // 处理 Ollama 模型
+        for (const QString& modelName : availableModels) {
+            QJsonObject config = m_settingsModel->getModelConfig("ollama", modelName);
+            if (config["enabled"].toBool(true)) {
+                QString displayName = QString("Ollama: %1").arg(modelName);
+                m_modelSelector->addItem(displayName, modelName);
+                LOG_INFO(QString("添加 Ollama 模型: %1").arg(displayName));
+            }
+        }
+    } else if (modelType == "local") {
+        // 处理本地模型
+        for (const QString& modelName : availableModels) {
+            QJsonObject config = m_settingsModel->getModelConfig("local", modelName);
+            if (config["enabled"].toBool(true)) {
+                QString displayName = QString("本地: %1")
+                    .arg(config["name"].toString(modelName));
+                m_modelSelector->addItem(displayName, modelName);
+                LOG_INFO(QString("添加本地模型: %1").arg(displayName));
+            }
+        }
+    }
+
+    // 如果没有可用的模型，添加提示信息
+    if (availableModels.isEmpty()) {
+        m_modelSelector->addItem(tr("请配置模型"), "");
+        LOG_INFO("没有可用的模型，显示配置提示");
     }
 
     // 恢复之前选择的模型
     int index = -1;
-
-    // 先尝试通过modelName匹配
-    if (!m_settingsModel->currentModelName().isEmpty()) {
-        index = m_modelSelector->findData(m_settingsModel->currentModelName());
+    if (!currentModel.isEmpty()) {
+        // 先尝试通过 modelName 匹配
+        index = m_modelSelector->findData(currentModel);
         if (index < 0) {
             // 如果找不到，尝试通过显示文本匹配
-            QString modelName = m_settingsModel->currentModelName();
             for (int i = 0; i < m_modelSelector->count(); i++) {
                 QString itemText = m_modelSelector->itemText(i);
-                if (itemText.contains(modelName, Qt::CaseInsensitive)) {
+                if (itemText.contains(currentModel, Qt::CaseInsensitive)) {
                     index = i;
                     break;
                 }
@@ -494,19 +448,21 @@ void MainWindow::updateModelList()
         }
     }
 
-    // 如果找到了匹配的选项，设置为当前选择
+    // 设置当前选择的模型
     if (index >= 0) {
         m_modelSelector->setCurrentIndex(index);
-    }
-    // 否则选择第一个有效的模型
-    else if (m_modelSelector->count() > 0) {
+        LOG_INFO(QString("恢复选择模型: %1").arg(m_modelSelector->currentText()));
+    } else if (m_modelSelector->count() > 0) {
         m_modelSelector->setCurrentIndex(0);
+        LOG_INFO(QString("选择第一个模型: %1").arg(m_modelSelector->currentText()));
     }
 
     // 恢复信号连接
     m_modelSelector->blockSignals(false);
 
-    LOG_INFO(QString("模型列表更新完成，当前选择: %1").arg(m_modelSelector->currentText()));
+    LOG_INFO(QString("模型列表更新完成，当前选择: %1，可用模型数量: %2")
+        .arg(m_modelSelector->currentText())
+        .arg(availableModels.size()));
 }
 
 void MainWindow::onModelSelectionChanged(int index)
@@ -638,9 +594,44 @@ void MainWindow::onOpenSettings()
     // 创建并显示设置对话框
     SettingsDialog dialog(m_settingsModel, this);
     if (dialog.exec() == QDialog::Accepted) {
-        // 如果设置被修改，刷新模型列表
-        refreshModelList();
-        LOG_INFO("设置已更新");
+        LOG_INFO("设置对话框已确认，开始更新设置");
+        
+        // 保存设置
+        saveSettings();
+        
+        // 如果当前类型是Ollama，先刷新模型列表
+        if (m_settingsModel->modelType() == SettingsModel::ModelType::Ollama) {
+            m_settingsModel->refreshOllamaModels();
+        }
+        
+        // 更新模型列表
+        updateModelList();
+        
+        // 获取当前选择的模型
+        QString currentModel = m_settingsModel->currentModelName();
+        if (!currentModel.isEmpty()) {
+            LOG_INFO(QString("准备创建模型服务 - 类型: %1, 模型: %2")
+                .arg(static_cast<int>(m_settingsModel->modelType()))
+                .arg(currentModel));
+            
+            // 先清理当前的服务
+            if (m_chatViewModel) {
+                m_chatViewModel->setLLMService(nullptr);
+            }
+            
+            // 创建新的LLMService
+            LLMService* service = m_settingsViewModel->createLLMService();
+            if (service) {
+                m_chatViewModel->setLLMService(service);
+                LOG_INFO(QString("成功创建并设置模型服务: %1").arg(currentModel));
+            } else {
+                LOG_ERROR(QString("创建模型服务失败: %1").arg(currentModel));
+            }
+        } else {
+            LOG_WARNING("当前没有选择模型，跳过服务创建");
+        }
+        
+        LOG_INFO("设置更新完成");
     }
 }
 

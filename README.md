@@ -71,7 +71,7 @@ mkdir build
 cd build
 
 # 配置项目
-cmake ..
+cmake .. -G "MinGW Makefiles"
 
 # 编译
 cmake --build .

@@ -5,6 +5,7 @@
 #include <QString>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QStringList>
 #include <QStandardPaths>
 #include <QDir>
@@ -68,6 +69,81 @@ public:
     bool isModelEnabled(const QString& type, const QString& name) const;
     void setModelEnabled(const QString& type, const QString& name, bool enabled);
 
+    QString ollamaUrl() const { return m_ollamaUrl; }
+    void setOllamaUrl(const QString &url);
+
+    double temperature() const { return m_temperature; }
+    void setTemperature(double value);
+
+    int maxTokens() const { return m_maxTokens; }
+    void setMaxTokens(int value);
+
+    int contextWindow() const { return m_contextWindow; }
+    void setContextWindow(int value);
+
+    QString theme() const { return m_theme; }
+    void setTheme(const QString &theme);
+
+    int fontSize() const { return m_fontSize; }
+    void setFontSize(int size);
+
+    QString fontFamily() const { return m_fontFamily; }
+    void setFontFamily(const QString &family);
+
+    QString language() const { return m_language; }
+    void setLanguage(const QString &lang);
+
+    bool autoSave() const { return m_autoSave; }
+    void setAutoSave(bool enabled);
+
+    int saveInterval() const { return m_saveInterval; }
+    void setSaveInterval(int seconds);
+
+    bool proxyEnabled() const { return m_proxyEnabled; }
+    void setProxyEnabled(bool enabled);
+
+    QString proxyHost() const { return m_proxyHost; }
+    void setProxyHost(const QString &host);
+
+    int proxyPort() const { return m_proxyPort; }
+    void setProxyPort(int port);
+
+    QString proxyType() const { return m_proxyType; }
+    void setProxyType(const QString &type);
+
+    QString proxyUsername() const { return m_proxyUsername; }
+    void setProxyUsername(const QString &username);
+
+    QString proxyPassword() const { return m_proxyPassword; }
+    void setProxyPassword(const QString &password);
+
+    // 获取提供商配置
+    QJsonObject getProviderConfig(const QString& type, const QString& provider) const;
+    
+    // 获取提供商的 API Key
+    QString getProviderApiKey(const QString& type, const QString& provider) const;
+    
+    // 设置提供商的 API Key
+    void setProviderApiKey(const QString& type, const QString& provider, const QString& apiKey);
+    
+    // 获取已配置的模型列表
+    QStringList getConfiguredModels(const QString& type) const;
+    
+    // 添加已配置的模型
+    void addConfiguredModel(const QString& type, const QString& modelName);
+    
+    // 移除已配置的模型
+    void removeConfiguredModel(const QString& type, const QString& modelName);
+
+    // 获取当前模型的提供商
+    QString getCurrentProvider() const;
+
+    // 获取当前模型的 API Key
+    QString getCurrentApiKey() const;
+
+    // 获取当前模型的 URL
+    QString getCurrentApiUrl() const;
+
 signals:
     void apiKeyChanged();
     void modelPathChanged();
@@ -77,6 +153,17 @@ signals:
     void ollamaModelsChanged();
     void appStateChanged();
     void modelConfigChanged();
+    void ollamaUrlChanged();
+    void temperatureChanged();
+    void maxTokensChanged();
+    void contextWindowChanged();
+    void themeChanged();
+    void fontSizeChanged();
+    void fontFamilyChanged();
+    void languageChanged();
+    void autoSaveChanged();
+    void saveIntervalChanged();
+    void proxySettingsChanged();
 
 private:
     SettingsModel(const SettingsModel&) = delete;
@@ -88,11 +175,33 @@ private:
     ModelType m_modelType = ModelType::API;
     QString m_currentModelName;
     QStringList m_ollamaModels;
+    QString m_ollamaUrl;
     QTimer* m_saveTimer;
     QJsonObject m_appState;
     QJsonObject m_models;
+    QJsonObject m_configuredModels;
+    QString m_currentProvider;
+
+    double m_temperature;
+    int m_maxTokens;
+    int m_contextWindow;
+    QString m_theme;
+    int m_fontSize;
+    QString m_fontFamily;
+    QString m_language;
+    bool m_autoSave;
+    int m_saveInterval;
+
+    bool m_proxyEnabled;
+    QString m_proxyHost;
+    int m_proxyPort;
+    QString m_proxyType;
+    QString m_proxyUsername;
+    QString m_proxyPassword;
 
     void initializeDefaultModels();
+    void migrateConfig();
+    void updateConfiguredModels();
 };
 
 #endif // SETTINGSMODEL_H

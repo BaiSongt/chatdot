@@ -19,6 +19,15 @@ SettingsModel& SettingsModel::instance()
 SettingsModel::SettingsModel(QObject *parent)
     : QObject(parent)
     , m_saveTimer(new QTimer(this))
+    , m_modelType(ModelType::API)
+    , m_temperature(0.7)
+    , m_maxTokens(2048)
+    , m_contextWindow(2048)
+    , m_fontSize(12)
+    , m_autoSave(true)
+    , m_saveInterval(60)
+    , m_proxyEnabled(false)
+    , m_proxyPort(80)
 {
     LOG_INFO("初始化 SettingsModel");
     
@@ -61,41 +70,277 @@ QString SettingsModel::getSettingsPath() const
 
 void SettingsModel::initializeDefaultModels()
 {
-    // 初始化 API 模型配置
-    QJsonObject apiModels;
+    // 初始化模型配置
+    QJsonObject models;
     
-    // OpenAI 模型
+    // API 模型配置
+    QJsonObject apiConfig;
+    
+    // OpenAI 配置
+    QJsonObject openaiConfig;
+    openaiConfig["api_key"] = "";
+    openaiConfig["default_url"] = "https://api.openai.com/v1/chat/completions";
+    
+    QJsonObject openaiModels;
     QJsonObject gpt35;
     gpt35["name"] = "gpt-3.5-turbo";
-    gpt35["provider"] = "OpenAI";
     gpt35["url"] = "https://api.openai.com/v1/chat/completions";
     gpt35["enabled"] = true;
-    apiModels["gpt-3.5-turbo"] = gpt35;
+    openaiModels["gpt-3.5-turbo"] = gpt35;
 
     QJsonObject gpt4;
     gpt4["name"] = "gpt-4";
-    gpt4["provider"] = "OpenAI";
     gpt4["url"] = "https://api.openai.com/v1/chat/completions";
     gpt4["enabled"] = true;
-    apiModels["gpt-4"] = gpt4;
+    openaiModels["gpt-4"] = gpt4;
+    
+    openaiConfig["models"] = openaiModels;
+    apiConfig["OpenAI"] = openaiConfig;
 
-    // Deepseek 模型
+    // Deepseek 配置
+    QJsonObject deepseekConfig;
+    deepseekConfig["api_key"] = "";
+    deepseekConfig["default_url"] = "https://api.deepseek.com/v1/chat/completions";
+    
+    QJsonObject deepseekModels;
     QJsonObject deepseek;
     deepseek["name"] = "deepseek-chat";
-    deepseek["provider"] = "Deepseek";
     deepseek["url"] = "https://api.deepseek.com/v1/chat/completions";
     deepseek["enabled"] = true;
-    apiModels["deepseek-chat"] = deepseek;
+    deepseekModels["deepseek-chat"] = deepseek;
+    
+    deepseekConfig["models"] = deepseekModels;
+    apiConfig["Deepseek"] = deepseekConfig;
+    
+    models["api"] = apiConfig;
 
-    m_models["api"] = apiModels;
+    // Ollama 模型配置
+    QJsonObject ollamaConfig;
+    ollamaConfig["default_url"] = "http://localhost:11434";
+    ollamaConfig["models"] = QJsonObject();
+    models["ollama"] = ollamaConfig;
 
-    // 初始化 Ollama 模型配置
-    QJsonObject ollamaModels;
-    m_models["ollama"] = ollamaModels;
+    // 本地模型配置
+    QJsonObject localConfig;
+    localConfig["models"] = QJsonObject();
+    models["local"] = localConfig;
 
-    // 初始化本地模型配置
-    QJsonObject localModels;
-    m_models["local"] = localModels;
+    m_models = models;
+    
+    // 初始化已配置的模型列表
+    updateConfiguredModels();
+}
+
+void SettingsModel::migrateConfig()
+{
+    LOG_INFO("开始迁移配置到新结构");
+    
+    // 检查是否需要迁移
+    if (m_models.contains("api") && m_models["api"].isObject()) {
+        QJsonObject apiConfig = m_models["api"].toObject();
+        if (apiConfig.contains("has_API")) {
+            // 需要迁移
+            QJsonObject newApiConfig;
+            
+            // 迁移 OpenAI 配置
+            if (apiConfig.contains("OpenAI")) {
+                QJsonObject openaiConfig;
+                openaiConfig["api_key"] = m_apiKey; // 迁移现有的 API Key
+                openaiConfig["default_url"] = "https://api.openai.com/v1/chat/completions";
+                openaiConfig["models"] = apiConfig["OpenAI"].toObject();
+                newApiConfig["OpenAI"] = openaiConfig;
+            }
+            
+            // 迁移 Deepseek 配置
+            if (apiConfig.contains("Deepseek")) {
+                QJsonObject deepseekConfig;
+                deepseekConfig["api_key"] = ""; // 需要用户重新配置
+                deepseekConfig["default_url"] = "https://api.deepseek.com/v1/chat/completions";
+                deepseekConfig["models"] = apiConfig["Deepseek"].toObject();
+                newApiConfig["Deepseek"] = deepseekConfig;
+            }
+            
+            m_models["api"] = newApiConfig;
+            LOG_INFO("API 配置迁移完成");
+        }
+    }
+    
+    // 更新已配置的模型列表
+    updateConfiguredModels();
+    
+    // 保存迁移后的配置
+    saveSettings();
+    LOG_INFO("配置迁移完成");
+}
+
+void SettingsModel::updateConfiguredModels()
+{
+    QJsonObject configuredModels;
+    
+    // 处理 API 模型
+    if (m_models.contains("api") && m_models["api"].isObject()) {
+        QJsonObject apiConfig = m_models["api"].toObject();
+        QJsonArray apiModels;
+        
+        // 遍历所有提供商
+        for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+            if (providerIt.value().isObject()) {
+                QJsonObject providerConfig = providerIt.value().toObject();
+                if (providerConfig.contains("models")) {
+                    QJsonObject models = providerConfig["models"].toObject();
+                    for (auto modelIt = models.begin(); modelIt != models.end(); ++modelIt) {
+                        if (modelIt.value().isObject()) {
+                            QJsonObject modelConfig = modelIt.value().toObject();
+                            if (modelConfig["enabled"].toBool(true)) {
+                                apiModels.append(modelIt.key());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        configuredModels["api"] = apiModels;
+    }
+    
+    // 处理 Ollama 模型
+    if (m_models.contains("ollama") && m_models["ollama"].isObject()) {
+        QJsonObject ollamaConfig = m_models["ollama"].toObject();
+        QJsonArray ollamaModels;
+        
+        if (ollamaConfig.contains("models")) {
+            QJsonObject models = ollamaConfig["models"].toObject();
+            for (auto it = models.begin(); it != models.end(); ++it) {
+                if (it.value().isObject()) {
+                    QJsonObject modelConfig = it.value().toObject();
+                    if (modelConfig["enabled"].toBool(true)) {
+                        ollamaModels.append(it.key());
+                    }
+                }
+            }
+        }
+        configuredModels["ollama"] = ollamaModels;
+    }
+    
+    // 处理本地模型
+    if (m_models.contains("local") && m_models["local"].isObject()) {
+        QJsonObject localConfig = m_models["local"].toObject();
+        QJsonArray localModels;
+        
+        if (localConfig.contains("models")) {
+            QJsonObject models = localConfig["models"].toObject();
+            for (auto it = models.begin(); it != models.end(); ++it) {
+                if (it.value().isObject()) {
+                    QJsonObject modelConfig = it.value().toObject();
+                    if (modelConfig["enabled"].toBool(true)) {
+                        localModels.append(it.key());
+                    }
+                }
+            }
+        }
+        configuredModels["local"] = localModels;
+    }
+    
+    m_configuredModels = configuredModels;
+    LOG_INFO("已更新配置的模型列表");
+}
+
+QJsonObject SettingsModel::getProviderConfig(const QString& type, const QString& provider) const
+{
+    if (m_models.contains(type) && m_models[type].isObject()) {
+        QJsonObject typeConfig = m_models[type].toObject();
+        if (typeConfig.contains(provider)) {
+            return typeConfig[provider].toObject();
+        }
+    }
+    return QJsonObject();
+}
+
+QString SettingsModel::getProviderApiKey(const QString& type, const QString& provider) const
+{
+    QJsonObject providerConfig = getProviderConfig(type, provider);
+    return providerConfig["api_key"].toString();
+}
+
+void SettingsModel::setProviderApiKey(const QString& type, const QString& provider, const QString& apiKey)
+{
+    if (m_models.contains(type) && m_models[type].isObject()) {
+        QJsonObject typeConfig = m_models[type].toObject();
+        if (typeConfig.contains(provider)) {
+            QJsonObject providerConfig = typeConfig[provider].toObject();
+            providerConfig["api_key"] = apiKey;
+            typeConfig[provider] = providerConfig;
+            m_models[type] = typeConfig;
+            scheduleSave();
+            emit apiKeyChanged();
+        }
+    }
+}
+
+QStringList SettingsModel::getConfiguredModels(const QString& type) const
+{
+    QStringList models;
+    if (m_configuredModels.contains(type)) {
+        QJsonArray modelArray = m_configuredModels[type].toArray();
+        for (const QJsonValue& value : modelArray) {
+            models.append(value.toString());
+        }
+    }
+    return models;
+}
+
+void SettingsModel::addConfiguredModel(const QString& type, const QString& modelName)
+{
+    if (!m_configuredModels.contains(type)) {
+        m_configuredModels[type] = QJsonArray();
+    }
+    
+    QJsonArray modelArray = m_configuredModels[type].toArray();
+    if (!modelArray.contains(modelName)) {
+        modelArray.append(modelName);
+        m_configuredModels[type] = modelArray;
+        scheduleSave();
+    }
+}
+
+void SettingsModel::removeConfiguredModel(const QString& type, const QString& modelName)
+{
+    if (m_configuredModels.contains(type)) {
+        QJsonArray modelArray = m_configuredModels[type].toArray();
+        QJsonArray newArray;
+        
+        for (const QJsonValue& value : modelArray) {
+            if (value.toString() != modelName) {
+                newArray.append(value);
+            }
+        }
+        
+        m_configuredModels[type] = newArray;
+        scheduleSave();
+    }
+}
+
+QString SettingsModel::getCurrentProvider() const
+{
+    return m_currentProvider;
+}
+
+QString SettingsModel::getCurrentApiKey() const
+{
+    if (m_modelType == ModelType::API && !m_currentProvider.isEmpty()) {
+        return getProviderApiKey("api", m_currentProvider);
+    }
+    return QString();
+}
+
+QString SettingsModel::getCurrentApiUrl() const
+{
+    if (m_modelType == ModelType::API && !m_currentProvider.isEmpty()) {
+        QJsonObject providerConfig = getProviderConfig("api", m_currentProvider);
+        if (!providerConfig.isEmpty()) {
+            return providerConfig["default_url"].toString();
+        }
+    }
+    return QString();
 }
 
 void SettingsModel::loadSettings()
@@ -120,43 +365,44 @@ void SettingsModel::loadSettings()
         return;
     }
 
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    QByteArray data = file.readAll();
     file.close();
 
-    if (!doc.isObject()) {
-        LOG_ERROR("配置文件格式无效");
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull()) {
+        LOG_ERROR("配置文件格式错误");
         setDefaultSettings();
         return;
     }
 
-    QJsonObject obj = doc.object();
-
-    // 加载 API 密钥
-    if (obj.contains("apiKey")) {
-        m_apiKey = obj["apiKey"].toString();
-    }
-
-    // 加载应用状态
-    if (obj.contains("appState") && obj["appState"].isObject()) {
-        m_appState = obj["appState"].toObject();
-    } else {
-        m_appState = QJsonObject();
-        m_appState["isFirstRun"] = true;
-    }
-
+    QJsonObject root = doc.object();
+    
     // 加载模型配置
-    if (obj.contains("models") && obj["models"].isObject()) {
-        m_models = obj["models"].toObject();
+    if (root.contains("models")) {
+        m_models = root["models"].toObject();
+        LOG_INFO("已加载模型配置");
     } else {
+        LOG_INFO("未找到模型配置，使用默认配置");
         initializeDefaultModels();
     }
 
-    // 从应用状态中恢复上次的模型选择
-    if (m_appState.contains("lastModelType")) {
-        m_modelType = static_cast<ModelType>(m_appState["lastModelType"].toInt(0));
+    // 加载已配置的模型列表
+    if (root.contains("configured_models")) {
+        m_configuredModels = root["configured_models"].toObject();
+        LOG_INFO("已加载配置的模型列表");
+    } else {
+        updateConfiguredModels();
     }
-    if (m_appState.contains("lastSelectedModel")) {
-        m_currentModelName = m_appState["lastSelectedModel"].toString();
+
+    // 加载基本设置
+    if (root.contains("appState")) {
+        QJsonObject appState = root["appState"].toObject();
+        if (appState.contains("lastModelType")) {
+            m_modelType = static_cast<ModelType>(appState["lastModelType"].toInt());
+        }
+        if (appState.contains("lastSelectedModel")) {
+            m_currentModelName = appState["lastSelectedModel"].toString();
+        }
     }
 
     // 根据不同的模型类型设置默认值
@@ -165,19 +411,32 @@ void SettingsModel::loadSettings()
             if (m_currentModelName.isEmpty()) {
                 m_currentModelName = "gpt-3.5-turbo";
             }
-            // 从模型配置中获取 API URL
-            QJsonObject config = getModelConfig("api", m_currentModelName);
-            if (!config.isEmpty()) {
-                m_apiUrl = config["url"].toString();
-                LOG_INFO(QString("从配置加载 API URL: %1").arg(m_apiUrl));
-            } else {
-                LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+            // 从模型配置中获取提供商和 API URL
+            QJsonObject apiConfig = m_models["api"].toObject();
+            for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+                if (providerIt.value().isObject()) {
+                    QJsonObject providerConfig = providerIt.value().toObject();
+                    if (providerConfig.contains("models")) {
+                        QJsonObject models = providerConfig["models"].toObject();
+                        if (models.contains(m_currentModelName)) {
+                            m_currentProvider = providerIt.key();
+                            m_apiUrl = providerConfig["default_url"].toString();
+                            LOG_INFO(QString("从配置加载提供商: %1, API URL: %2")
+                                .arg(m_currentProvider)
+                                .arg(m_apiUrl));
+                            break;
+                        }
+                    }
+                }
             }
             break;
         }
         case ModelType::Ollama: {
             if (m_currentModelName.isEmpty()) {
-                m_currentModelName = m_appState["ollamaModel"].toString();
+                // 获取 Ollama 配置
+                QJsonObject ollamaConfig = m_models["ollama"].toObject();
+                m_ollamaUrl = ollamaConfig["default_url"].toString();
+                LOG_INFO(QString("使用默认 Ollama URL: %1").arg(m_ollamaUrl));
             }
             refreshOllamaModels();
             break;
@@ -198,9 +457,57 @@ void SettingsModel::loadSettings()
         }
     }
 
-    LOG_INFO(QString("设置加载完成，当前模型类型: %1，模型名称: %2，API URL: %3，模型路径: %4")
+    // 加载其他设置
+    if (root.contains("temperature")) {
+        m_temperature = root["temperature"].toDouble();
+    }
+    if (root.contains("maxTokens")) {
+        m_maxTokens = root["maxTokens"].toInt();
+    }
+    if (root.contains("contextWindow")) {
+        m_contextWindow = root["contextWindow"].toInt();
+    }
+    if (root.contains("theme")) {
+        m_theme = root["theme"].toString();
+    }
+    if (root.contains("fontSize")) {
+        m_fontSize = root["fontSize"].toInt();
+    }
+    if (root.contains("fontFamily")) {
+        m_fontFamily = root["fontFamily"].toString();
+    }
+    if (root.contains("language")) {
+        m_language = root["language"].toString();
+    }
+    if (root.contains("autoSave")) {
+        m_autoSave = root["autoSave"].toBool();
+    }
+    if (root.contains("saveInterval")) {
+        m_saveInterval = root["saveInterval"].toInt();
+    }
+    if (root.contains("proxyEnabled")) {
+        m_proxyEnabled = root["proxyEnabled"].toBool();
+    }
+    if (root.contains("proxyHost")) {
+        m_proxyHost = root["proxyHost"].toString();
+    }
+    if (root.contains("proxyPort")) {
+        m_proxyPort = root["proxyPort"].toInt();
+    }
+    if (root.contains("proxyType")) {
+        m_proxyType = root["proxyType"].toString();
+    }
+    if (root.contains("proxyUsername")) {
+        m_proxyUsername = root["proxyUsername"].toString();
+    }
+    if (root.contains("proxyPassword")) {
+        m_proxyPassword = root["proxyPassword"].toString();
+    }
+
+    LOG_INFO(QString("设置加载完成，当前模型类型: %1，模型名称: %2，提供商: %3，API URL: %4，模型路径: %5")
              .arg(static_cast<int>(m_modelType))
              .arg(m_currentModelName)
+             .arg(m_currentProvider)
              .arg(m_apiUrl)
              .arg(m_modelPath));
 
@@ -222,18 +529,64 @@ void SettingsModel::saveSettings()
 
     QJsonObject obj;
 
-    // 保存 API 密钥
-    if (!m_apiKey.isEmpty()) {
-        obj["apiKey"] = m_apiKey;
-    }
-
     // 保存应用状态
-    m_appState["lastModelType"] = static_cast<int>(m_modelType);
-    m_appState["lastSelectedModel"] = m_currentModelName;
-    obj["appState"] = m_appState;
+    QJsonObject appState;
+    appState["lastModelType"] = static_cast<int>(m_modelType);
+    appState["lastSelectedModel"] = m_currentModelName;
+    obj["appState"] = appState;
 
     // 保存模型配置
     obj["models"] = m_models;
+
+    // 保存已配置的模型列表
+    obj["configured_models"] = m_configuredModels;
+
+    // 保存其他设置
+    if (m_temperature != 0.7) {
+        obj["temperature"] = m_temperature;
+    }
+    if (m_maxTokens != 2048) {
+        obj["maxTokens"] = m_maxTokens;
+    }
+    if (m_contextWindow != 2048) {
+        obj["contextWindow"] = m_contextWindow;
+    }
+    if (!m_theme.isEmpty()) {
+        obj["theme"] = m_theme;
+    }
+    if (m_fontSize != 12) {
+        obj["fontSize"] = m_fontSize;
+    }
+    if (!m_fontFamily.isEmpty()) {
+        obj["fontFamily"] = m_fontFamily;
+    }
+    if (!m_language.isEmpty()) {
+        obj["language"] = m_language;
+    }
+    if (m_autoSave) {
+        obj["autoSave"] = m_autoSave;
+    }
+    if (m_saveInterval != 60) {
+        obj["saveInterval"] = m_saveInterval;
+    }
+    if (m_proxyEnabled) {
+        obj["proxyEnabled"] = m_proxyEnabled;
+    }
+    if (!m_proxyHost.isEmpty()) {
+        obj["proxyHost"] = m_proxyHost;
+    }
+    if (m_proxyPort != 80) {
+        obj["proxyPort"] = m_proxyPort;
+    }
+    if (!m_proxyType.isEmpty()) {
+        obj["proxyType"] = m_proxyType;
+    }
+    if (!m_proxyUsername.isEmpty()) {
+        obj["proxyUsername"] = m_proxyUsername;
+    }
+    if (!m_proxyPassword.isEmpty()) {
+        obj["proxyPassword"] = m_proxyPassword;
+    }
 
     QJsonDocument doc(obj);
 
@@ -261,8 +614,9 @@ void SettingsModel::setDefaultSettings()
     initializeDefaultModels();
     
     // 设置首次运行标记
-    m_appState = QJsonObject();
-    m_appState["isFirstRun"] = true;
+    QJsonObject appState;
+    appState["isFirstRun"] = true;
+    m_appState = appState;
 }
 
 void SettingsModel::setAppStateValue(const QString& key, const QJsonValue& value)
@@ -280,9 +634,36 @@ QJsonValue SettingsModel::appStateValue(const QString& key) const
 QJsonObject SettingsModel::getModelConfig(const QString& type, const QString& name) const
 {
     if (m_models.contains(type) && m_models[type].isObject()) {
-        QJsonObject typeObj = m_models[type].toObject();
-        if (typeObj.contains(name) && typeObj[name].isObject()) {
-            return typeObj[name].toObject();
+        QJsonObject typeConfig = m_models[type].toObject();
+        
+        // 如果 name 为空，返回整个类型的配置
+        if (name.isEmpty()) {
+            return typeConfig;
+        }
+        
+        // 对于按提供商组织的模型（如 API 类型）
+        if (typeConfig.contains("has_API") && typeConfig["has_API"].toBool()) {
+            // 遍历所有提供商
+            for (auto providerIt = typeConfig.begin(); providerIt != typeConfig.end(); ++providerIt) {
+                if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
+                    providerIt.value().isObject()) {
+                    QJsonObject providerModels = providerIt.value().toObject();
+                    if (providerModels.contains(name)) {
+                        QJsonObject modelConfig = providerModels[name].toObject();
+                        modelConfig["provider"] = providerIt.key();
+                        modelConfig["url"] = modelConfig["url"].toString().isEmpty() ? 
+                            typeConfig["default_url"].toString() : modelConfig["url"].toString();
+                        return modelConfig;
+                    }
+                }
+            }
+        }
+        // 对于直接组织的模型（如 Ollama 和本地模型）
+        else if (typeConfig.contains("models")) {
+            QJsonObject modelsObj = typeConfig["models"].toObject();
+            if (modelsObj.contains(name)) {
+                return modelsObj[name].toObject();
+            }
         }
     }
     return QJsonObject();
@@ -304,12 +685,31 @@ QStringList SettingsModel::getAvailableModels(const QString& type) const
 {
     QStringList models;
     if (m_models.contains(type) && m_models[type].isObject()) {
-        QJsonObject typeObj = m_models[type].toObject();
-        for (auto it = typeObj.begin(); it != typeObj.end(); ++it) {
-            if (it.value().isObject()) {
-                QJsonObject modelObj = it.value().toObject();
-                if (modelObj["enabled"].toBool(true)) {
-                    models.append(it.key());
+        QJsonObject typeConfig = m_models[type].toObject();
+        if (typeConfig.contains("models")) {
+            QJsonObject modelsObj = typeConfig["models"].toObject();
+            for (auto it = modelsObj.begin(); it != modelsObj.end(); ++it) {
+                if (it.value().isObject()) {
+                    QJsonObject modelObj = it.value().toObject();
+                    if (modelObj["enabled"].toBool(true)) {
+                        models.append(it.key());
+                    }
+                }
+            }
+        } else {
+            // 对于按提供商组织的模型（如 API 类型）
+            for (auto providerIt = typeConfig.begin(); providerIt != typeConfig.end(); ++providerIt) {
+                if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
+                    providerIt.value().isObject()) {
+                    QJsonObject providerModels = providerIt.value().toObject();
+                    for (auto modelIt = providerModels.begin(); modelIt != providerModels.end(); ++modelIt) {
+                        if (modelIt.value().isObject()) {
+                            QJsonObject modelObj = modelIt.value().toObject();
+                            if (modelObj["enabled"].toBool(true)) {
+                                models.append(modelIt.key());
+                            }
+                        }
+                    }
                 }
             }
         }

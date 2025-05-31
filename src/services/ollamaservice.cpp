@@ -41,7 +41,8 @@ QFuture<QString> OllamaService::generateResponse(const QString& prompt)
     m_currentFuture = future;
 
     // 再次检查服务可用性
-    if (!isAvailable()) {        QString error = "Ollama 服务不可用，请确保服务正在运行且模型已下载";
+    if (!isAvailable()) {
+        QString error = "Ollama 服务不可用，请确保服务正在运行且模型已下载";
         LOG_ERROR(error);
         future.reportStarted();
         future.reportException(std::make_exception_ptr(std::runtime_error(error.toStdString())));
@@ -57,11 +58,23 @@ QFuture<QString> OllamaService::generateResponse(const QString& prompt)
     json["model"] = m_modelPath;
     json["prompt"] = prompt;
     json["stream"] = false;
-    json["options"] = QJsonObject{
-        {"temperature", 0.7},
-        {"top_p", 0.9},
-        {"num_predict", 1000}  // 限制生成的最大token数
-    };
+    
+    // 根据深度思考模式调整参数
+    QJsonObject options;
+    if (m_isDeepThinking) {
+        options["temperature"] = 0.3;  // 降低温度以获得更确定的回答
+        options["top_p"] = 0.7;       // 降低采样范围
+        options["num_predict"] = 2000; // 增加生成的最大token数
+        options["repeat_penalty"] = 1.2; // 增加重复惩罚
+        options["top_k"] = 40;        // 降低top_k值
+    } else {
+        options["temperature"] = 0.7;
+        options["top_p"] = 0.9;
+        options["num_predict"] = 1000;
+        options["repeat_penalty"] = 1.1;
+        options["top_k"] = 50;
+    }
+    json["options"] = options;
 
     QByteArray jsonData = QJsonDocument(json).toJson();
     LOG_INFO(QString("Ollama 请求数据: %1").arg(QString(jsonData)));

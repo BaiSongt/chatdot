@@ -35,6 +35,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_saveChatAction(nullptr)
     , m_loadChatAction(nullptr)
     , m_aboutAction(nullptr)
+    , m_deepThinkingButton(nullptr)
+    , m_isDeepThinking(false)
 {
     try {
         LOG_INFO("开始初始化主窗口...");
@@ -80,7 +82,7 @@ MainWindow::MainWindow(QWidget *parent)
             setupUI();
             if (!m_centralWidget || !m_mainLayout || !m_chatDisplay || 
                 !m_messageInput || !m_sendButton || !m_clearButton || 
-                !m_imageButton || !m_modelSelector) {
+                !m_imageButton || !m_modelSelector || !m_deepThinkingButton) {
                 throw std::runtime_error("UI组件创建失败");
             }
             LOG_INFO("UI设置完成");
@@ -208,6 +210,29 @@ void MainWindow::setupUI()
     m_chatDisplay->setMinimumHeight(500);  // 增加聊天区域高度
     m_mainLayout->addWidget(m_chatDisplay);
 
+    // 功能按钮区域
+    QHBoxLayout* functionLayout = new QHBoxLayout();
+    functionLayout->setSpacing(8);
+
+    m_clearButton = new QPushButton(this->tr("清除"), this);
+    m_clearButton->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
+    m_clearButton->setFixedWidth(80);
+    functionLayout->addWidget(m_clearButton);
+
+    m_imageButton = new QPushButton(this->tr("图片"), this);
+    m_imageButton->setIcon(style()->standardIcon(QStyle::SP_FileIcon));
+    m_imageButton->setFixedWidth(80);
+    functionLayout->addWidget(m_imageButton);
+
+    m_deepThinkingButton = new QPushButton(this->tr("深度思考"), this);
+    m_deepThinkingButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    m_deepThinkingButton->setFixedWidth(80);
+    m_deepThinkingButton->setCheckable(true);  // 设置为可切换状态
+    functionLayout->addWidget(m_deepThinkingButton);
+
+    functionLayout->addStretch();
+    m_mainLayout->addLayout(functionLayout);
+
     // 输入区域
     QHBoxLayout* inputLayout = new QHBoxLayout();
     inputLayout->setSpacing(8);  // 设置按钮之间的间距
@@ -216,26 +241,11 @@ void MainWindow::setupUI()
     m_messageInput->setPlaceholderText(this->tr("输入消息..."));
     inputLayout->addWidget(m_messageInput);
 
-    // 创建按钮容器
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
-    buttonLayout->setSpacing(8);
-
     m_sendButton = new QPushButton(this->tr("发送"), this);
     m_sendButton->setIcon(style()->standardIcon(QStyle::SP_CommandLink));
     m_sendButton->setFixedWidth(80);
-    buttonLayout->addWidget(m_sendButton);
+    inputLayout->addWidget(m_sendButton);
 
-    m_clearButton = new QPushButton(this->tr("清除"), this);
-    m_clearButton->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
-    m_clearButton->setFixedWidth(80);
-    buttonLayout->addWidget(m_clearButton);
-
-    m_imageButton = new QPushButton(this->tr("图片"), this);
-    m_imageButton->setIcon(style()->standardIcon(QStyle::SP_FileIcon));
-    m_imageButton->setFixedWidth(80);
-    buttonLayout->addWidget(m_imageButton);
-
-    inputLayout->addLayout(buttonLayout);
     m_mainLayout->addLayout(inputLayout);
 
     // 设置窗口大小为9:16比例
@@ -290,6 +300,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onClearChat);
     connect(m_imageButton, &QPushButton::clicked,
             this, &MainWindow::selectImage);
+    connect(m_deepThinkingButton, &QPushButton::toggled,
+            this, &MainWindow::onDeepThinkingToggled);
 
     // 连接生成状态信号
     connect(m_chatViewModel, &ChatViewModel::generationStarted,
@@ -850,4 +862,23 @@ void MainWindow::showError(const QString& title, const QString& message)
 {
     QMessageBox::critical(this, title, message);
     LOG_ERROR(message);
+}
+
+void MainWindow::onDeepThinkingToggled(bool checked)
+{
+    m_isDeepThinking = checked;
+    if (m_chatViewModel) {
+        m_chatViewModel->setDeepThinkingMode(checked);
+    }
+    
+    // 更新按钮状态显示
+    if (checked) {
+        m_deepThinkingButton->setText(tr("深度思考中"));
+        m_deepThinkingButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    } else {
+        m_deepThinkingButton->setText(tr("深度思考"));
+        m_deepThinkingButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    }
+    
+    LOG_INFO(QString("深度思考模式: %1").arg(checked ? "开启" : "关闭"));
 }

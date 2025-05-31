@@ -19,13 +19,20 @@ public:
     virtual QString getModelName() const = 0;
     virtual void cancelGeneration();
 
+    // 深度思考模式相关方法
+    void setDeepThinkingMode(bool enabled);
+    bool isDeepThinkingMode() const { return m_isDeepThinking; }
+
 signals:
     void responseGenerated(const QString& response);
     void streamResponseReceived(const QString& partialResponse);
     void errorOccurred(const QString& error);
+    void deepThinkingModeChanged(bool enabled);
+
 protected:
     QString m_modelPath;
     bool m_isCancelled;
+    bool m_isDeepThinking;
 };
 
 #endif // LLMSERVICE_H

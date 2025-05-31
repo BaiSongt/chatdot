@@ -44,6 +44,7 @@ private slots:
     void onGenerationStarted();
     void onGenerationFinished();
     void onStreamResponse(const QString& partialResponse);
+    void onDeepThinkingToggled(bool checked);
 
 private:
     void setupUI();
@@ -84,10 +85,12 @@ private:
     QPushButton* m_sendButton;
     QPushButton* m_clearButton;
     QPushButton* m_imageButton;
+    QPushButton* m_deepThinkingButton;
     QComboBox* m_modelSelector;
     QLabel* m_statusLabel;
     bool m_isGenerating;
     bool m_isUpdating;  // 用于防止模型选择器的递归更新
+    bool m_isDeepThinking;
 
     // Menu Items
     QAction* m_settingsAction;

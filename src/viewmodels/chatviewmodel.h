@@ -21,11 +21,13 @@ public:
     Q_INVOKABLE void sendMessage(const QString& message);
     Q_INVOKABLE void clearChat();
     Q_INVOKABLE void cancelGeneration();
+    Q_INVOKABLE void setDeepThinkingMode(bool enabled);
 
     // 设置和获取 LLMService
     void setLLMService(LLMService* service);
     bool hasLLMService() const { return m_llmService != nullptr; }
     QString getServiceStatus() const;
+    bool isDeepThinkingMode() const { return m_isDeepThinking; }
 
 signals:
     void responseReceived(const QString& response);
@@ -33,6 +35,7 @@ signals:
     void generationStarted();
     void generationFinished();
     void streamResponse(const QString& partialResponse);
+    void deepThinkingModeChanged(bool enabled);
 
 public slots:
     void handleResponse(const QString& response);
@@ -45,6 +48,7 @@ private:
     bool m_isCancelled;
     QString m_currentResponse;
     bool m_isGenerating;
+    bool m_isDeepThinking;
 };
 
 #endif // CHATVIEWMODEL_H

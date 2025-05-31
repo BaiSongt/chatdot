@@ -45,14 +45,31 @@ QByteArray APIService::prepareRequestData(const QString& prompt) const
     messages.append(message);
     json["messages"] = messages;
 
-    // 设置生成参数
-    json["temperature"] = 0.7;
-    json["max_tokens"] = 2000;
+    // 根据深度思考模式设置生成参数
+    if (m_isDeepThinking) {
+        json["temperature"] = 0.3;  // 降低温度以获得更确定的回答
+        json["max_tokens"] = 4000;  // 增加最大token数
+        json["top_p"] = 0.7;        // 降低采样范围
+        json["frequency_penalty"] = 0.5; // 增加频率惩罚
+        json["presence_penalty"] = 0.5;  // 增加存在惩罚
+    } else {
+        json["temperature"] = 0.7;
+        json["max_tokens"] = 2000;
+        json["top_p"] = 0.9;
+        json["frequency_penalty"] = 0.0;
+        json["presence_penalty"] = 0.0;
+    }
 
     if (m_provider == "Deepseek") {
         // Deepseek 特定的参数
         json["do_sample"] = true;
-        json["top_p"] = 0.8;
+        if (m_isDeepThinking) {
+            json["top_p"] = 0.7;
+            json["top_k"] = 40;
+        } else {
+            json["top_p"] = 0.8;
+            json["top_k"] = 50;
+        }
     }
 
     return QJsonDocument(json).toJson();

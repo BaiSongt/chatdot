@@ -12,6 +12,7 @@ ChatViewModel::ChatViewModel(ChatModel* model, QObject *parent)
     , m_isCancelled(false)
     , m_currentResponse("")
     , m_isGenerating(false)
+    , m_isDeepThinking(false)
 {
 }
 
@@ -145,4 +146,13 @@ QString ChatViewModel::getServiceStatus() const
     }
 
     return status;
+}
+
+void ChatViewModel::setDeepThinkingMode(bool enabled)
+{
+    if (m_isDeepThinking != enabled) {
+        m_isDeepThinking = enabled;
+        emit deepThinkingModeChanged(enabled);
+        LOG_INFO(QString("深度思考模式: %1").arg(enabled ? "开启" : "关闭"));
+    }
 }

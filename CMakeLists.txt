@@ -107,3 +107,9 @@ if(WIN32)
             $<TARGET_FILE_DIR:${PROJECT_NAME}>
     )
 endif()
+
+# 复制主题文件到构建目录
+file(COPY ${CMAKE_SOURCE_DIR}/src/themes/light.qss
+          ${CMAKE_SOURCE_DIR}/src/themes/dark.qss
+          ${CMAKE_SOURCE_DIR}/src/themes/system.qss
+     DESTINATION ${CMAKE_BINARY_DIR}/bin/themes)

@@ -262,12 +262,12 @@ void MainWindow::setupUI()
     m_mainLayout->addLayout(inputLayout);
 
     // 设置窗口大小为9:16比例
-    int width = 300;  // 基础宽度
+    int width = 400;  // 基础宽度
     int height = width * 16 / 9;  // 按9:16比例计算高度
     resize(width, height);
     
     // 设置最小窗口大小
-    setMinimumSize(90, 160);  // 保持9:16比例的最小尺寸
+    setMinimumSize(width, height);  // 保持9:16比例的最小尺寸
 }
 
 void MainWindow::setupMenu()

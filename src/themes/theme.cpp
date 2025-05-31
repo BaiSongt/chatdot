@@ -2,7 +2,8 @@
 #include <QApplication>
 #include <QFile>
 #include <QDir>
-#include <QStandardPaths>
+#include <QSettings>
+#include <QStyle>
 #include <QStyleFactory>
 
 ThemeManager& ThemeManager::instance()
@@ -14,9 +15,8 @@ ThemeManager& ThemeManager::instance()
 ThemeManager::ThemeManager(QObject *parent)
     : QObject(parent)
     , m_currentTheme(Theme::System)
-    , m_settings("ChatDot", "Theme")
 {
-    loadSavedTheme();
+    loadTheme();
 }
 
 ThemeManager::~ThemeManager()
@@ -35,6 +35,11 @@ void ThemeManager::setTheme(Theme theme)
     }
 }
 
+ThemeManager::Theme ThemeManager::currentTheme() const
+{
+    return m_currentTheme;
+}
+
 QString ThemeManager::currentStyleSheet() const
 {
     return m_currentStyleSheet;
@@ -42,48 +47,60 @@ QString ThemeManager::currentStyleSheet() const
 
 void ThemeManager::applyTheme()
 {
-    Theme effectiveTheme = m_currentTheme;
-    if (effectiveTheme == Theme::System) {
-        effectiveTheme = isSystemDarkMode() ? Theme::Dark : Theme::Light;
-    }
-
     QString themeFile;
-    switch (effectiveTheme) {
+    switch (m_currentTheme) {
         case Theme::Light:
-            themeFile = ":/themes/light.qss";
+            themeFile = "themes/light.qss";
             break;
         case Theme::Dark:
-            themeFile = ":/themes/dark.qss";
+            themeFile = "themes/dark.qss";
             break;
-        default:
-            themeFile = ":/themes/light.qss";
+        case Theme::System:
+            themeFile = isSystemDarkMode() ? "themes/dark.qss" : "themes/light.qss";
             break;
     }
 
-    loadTheme(themeFile);
-    qApp->setStyleSheet(m_currentStyleSheet);
-}
+    // 获取应用程序目录
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString fullPath = QDir(appDir).absoluteFilePath(themeFile);
+    LOG_INFO(QString("正在加载主题文件: %1").arg(fullPath));
 
-void ThemeManager::loadTheme(const QString& themeFile)
-{
-    QFile file(themeFile);
+    QFile file(fullPath);
     if (file.open(QFile::ReadOnly | QFile::Text)) {
-        m_currentStyleSheet = QString::fromUtf8(file.readAll());
+        QString styleSheet = QString::fromUtf8(file.readAll());
         file.close();
+
+        // 检查样式表内容是否为空
+        if (styleSheet.isEmpty()) {
+            LOG_ERROR(QString("主题文件为空: %1").arg(fullPath));
+            return;
+        }
+
+        // 尝试应用样式表
+        try {
+            qApp->setStyleSheet(styleSheet);
+            m_currentStyleSheet = styleSheet;
+            LOG_INFO(QString("成功加载主题: %1").arg(themeFile));
+        } catch (const std::exception& e) {
+            LOG_ERROR(QString("应用主题时发生错误: %1").arg(e.what()));
+        }
     } else {
-        LOG_ERROR(QString("无法加载主题文件: %1").arg(themeFile));
+        LOG_ERROR(QString("无法打开主题文件: %1, 错误: %2")
+            .arg(fullPath)
+            .arg(file.errorString()));
     }
 }
 
 void ThemeManager::saveTheme()
 {
-    m_settings.setValue("theme", static_cast<int>(m_currentTheme));
+    QSettings settings;
+    settings.setValue("theme", static_cast<int>(m_currentTheme));
 }
 
-void ThemeManager::loadSavedTheme()
+void ThemeManager::loadTheme()
 {
-    int savedTheme = m_settings.value("theme", static_cast<int>(Theme::System)).toInt();
-    m_currentTheme = static_cast<Theme>(savedTheme);
+    QSettings settings;
+    m_currentTheme = static_cast<Theme>(settings.value("theme", static_cast<int>(Theme::System)).toInt());
     applyTheme();
 }
 

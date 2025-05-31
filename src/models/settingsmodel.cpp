@@ -192,6 +192,20 @@ void SettingsModel::updateConfiguredModels()
     m_configuredModels["ollama"] = ollamaModels;
     m_configuredModels["local"] = localModels;
 
+    // 如果当前没有选择模型，但有可用模型，则选择第一个
+    if (m_currentModelName.isEmpty()) {
+        if (m_modelType == ModelType::API && !apiModels.isEmpty()) {
+            m_currentModelName = apiModels.first().toString();
+            emit currentModelNameChanged(m_currentModelName);
+        } else if (m_modelType == ModelType::Ollama && !ollamaModels.isEmpty()) {
+            m_currentModelName = ollamaModels.first().toString();
+            emit currentModelNameChanged(m_currentModelName);
+        } else if (m_modelType == ModelType::Local && !localModels.isEmpty()) {
+            m_currentModelName = localModels.first().toString();
+            emit currentModelNameChanged(m_currentModelName);
+        }
+    }
+
     logConfiguredModelsSummary();
 }
 
@@ -650,23 +664,30 @@ void SettingsModel::loadSettings()
     // 根据不同的模型类型设置默认值
     switch (m_modelType) {
         case ModelType::API: {
-            if (m_currentModelName.isEmpty()) {
-                m_currentModelName = "gpt-3.5-turbo";
+            // 如果没有选择模型，尝试从配置的模型列表中选择第一个
+            if (m_currentModelName.isEmpty() && m_configuredModels.contains("api")) {
+                QJsonArray apiModels = m_configuredModels["api"].toArray();
+                if (!apiModels.isEmpty()) {
+                    m_currentModelName = apiModels.first().toString();
+                }
             }
+            
             // 从模型配置中获取提供商和 API URL
-            QJsonObject apiConfig = m_models_config["api"].toObject();
-            for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
-                if (providerIt.value().isObject()) {
-                    QJsonObject providerConfig = providerIt.value().toObject();
-                    if (providerConfig.contains("models")) {
-                        QJsonObject models = providerConfig["models"].toObject();
-                        if (models.contains(m_currentModelName)) {
-                            m_currentProvider = providerIt.key();
-                            m_apiUrl = providerConfig["default_url"].toString();
-                            LOG_INFO(QString("从配置加载提供商: %1, API URL: %2")
-                                .arg(m_currentProvider)
-                                .arg(m_apiUrl));
-                            break;
+            if (!m_currentModelName.isEmpty()) {
+                QJsonObject apiConfig = m_models_config["api"].toObject();
+                for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+                    if (providerIt.value().isObject()) {
+                        QJsonObject providerConfig = providerIt.value().toObject();
+                        if (providerConfig.contains("models")) {
+                            QJsonObject models = providerConfig["models"].toObject();
+                            if (models.contains(m_currentModelName)) {
+                                m_currentProvider = providerIt.key();
+                                m_apiUrl = providerConfig["default_url"].toString();
+                                LOG_INFO(QString("从配置加载提供商: %1, API URL: %2")
+                                    .arg(m_currentProvider)
+                                    .arg(m_apiUrl));
+                                break;
+                            }
                         }
                     }
                 }
@@ -674,26 +695,34 @@ void SettingsModel::loadSettings()
             break;
         }
         case ModelType::Ollama: {
-            if (m_currentModelName.isEmpty()) {
-                // 获取 Ollama 配置
-                QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
-                m_ollamaUrl = ollamaConfig["default_url"].toString();
-                LOG_INFO(QString("使用默认 Ollama URL: %1").arg(m_ollamaUrl));
+            if (m_currentModelName.isEmpty() && m_configuredModels.contains("ollama")) {
+                QJsonArray ollamaModels = m_configuredModels["ollama"].toArray();
+                if (!ollamaModels.isEmpty()) {
+                    m_currentModelName = ollamaModels.first().toString();
+                }
             }
-            refreshOllamaModels();
+            // 获取 Ollama 配置
+            QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
+            m_ollamaUrl = ollamaConfig["default_url"].toString();
+            LOG_INFO(QString("使用默认 Ollama URL: %1").arg(m_ollamaUrl));
             break;
         }
         case ModelType::Local: {
-            if (!m_modelPath.isEmpty() && m_currentModelName.isEmpty()) {
-                m_currentModelName = QFileInfo(m_modelPath).fileName();
+            if (m_currentModelName.isEmpty() && m_configuredModels.contains("local")) {
+                QJsonArray localModels = m_configuredModels["local"].toArray();
+                if (!localModels.isEmpty()) {
+                    m_currentModelName = localModels.first().toString();
+                }
             }
             // 从模型配置中获取模型路径
-            QJsonObject config = getModelConfig("local", m_currentModelName);
-            if (!config.isEmpty()) {
-                m_modelPath = config["path"].toString();
-                LOG_INFO(QString("从配置加载模型路径: %1").arg(m_modelPath));
-            } else {
-                LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+            if (!m_currentModelName.isEmpty()) {
+                QJsonObject config = getModelConfig("local", m_currentModelName);
+                if (!config.isEmpty()) {
+                    m_modelPath = config["path"].toString();
+                    LOG_INFO(QString("从配置加载模型路径: %1").arg(m_modelPath));
+                } else {
+                    LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+                }
             }
             break;
         }

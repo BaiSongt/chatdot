@@ -385,7 +385,7 @@ void MainWindow::updateModelList()
 
 void MainWindow::updateApiModels(const QStringList& availableModels)
 {
-    QJsonObject apiConfig = m_settingsModel->getModelConfig("models_config", "");
+    QJsonObject apiConfig = m_settingsModel->getModelConfig("api", "");
     for (const QString& modelName : availableModels) {
         // 遍历所有提供商查找模型
         for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
@@ -396,12 +396,12 @@ void MainWindow::updateApiModels(const QStringList& availableModels)
                 if (providerConfig.contains("models")) {
                     QJsonObject models = providerConfig["models"].toObject();
                     if (models.contains(modelName)) {
-                        bool isComplete = m_settingsModel->isModelConfigComplete("models_config", modelName);
+                        bool isComplete = m_settingsModel->isModelConfigComplete("api", modelName);
                         QStringList missingItems;
                         if (!isComplete) {
-                            missingItems = m_settingsModel->getMissingConfigItems("models_config", modelName);
+                            missingItems = m_settingsModel->getMissingConfigItems("api", modelName);
                         }
-                        QString displayName = getModelDisplayName("models_config", modelName, provider);
+                        QString displayName = getModelDisplayName("api", modelName, provider);
                         addModelToSelector(displayName, modelName, isComplete, missingItems);
                         break;
                     }

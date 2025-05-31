@@ -219,21 +219,31 @@ void SettingsDialog::updateOllamaModelList()
     QStringList models = m_model->ollamaModels();
     LOG_INFO(QString("获取到%1个Ollama模型").arg(models.size()));
 
-    m_ollamaModelSelect->addItems(models);
+    if (models.isEmpty()) {
+        m_ollamaModelSelect->addItem(tr("无可用模型"));
+        m_ollamaModelSelect->setEnabled(false);
+    } else {
+        m_ollamaModelSelect->setEnabled(true);
+        m_ollamaModelSelect->addItems(models);
 
-    // 恢复之前选择的模型
-    int index = m_ollamaModelSelect->findText(currentModel);
-    if (index >= 0) {
-        m_ollamaModelSelect->setCurrentIndex(index);
-        LOG_INFO(QString("恢复选择模型: %1").arg(currentModel));
-    } else if (!models.isEmpty()) {
-        // 如果找不到之前的模型，但列表不为空，选择第一个
-        m_ollamaModelSelect->setCurrentIndex(0);
-        LOG_INFO(QString("选择新模型: %1").arg(m_ollamaModelSelect->currentText()));
+        // 恢复之前选择的模型
+        int index = m_ollamaModelSelect->findText(currentModel);
+        if (index >= 0) {
+            m_ollamaModelSelect->setCurrentIndex(index);
+            LOG_INFO(QString("恢复选择模型: %1").arg(currentModel));
+        } else if (!models.isEmpty()) {
+            // 如果找不到之前的模型，但列表不为空，选择第一个
+            m_ollamaModelSelect->setCurrentIndex(0);
+            LOG_INFO(QString("选择新模型: %1").arg(m_ollamaModelSelect->currentText()));
+        }
     }
 
+    // 确保刷新按钮可用
     m_refreshOllamaModelsBtn->setEnabled(true);
     m_refreshOllamaModelsBtn->setText(tr("刷新"));
+    
+    // 发出模型列表更新信号
+    emit m_model->ollamaModelsChanged();
 }
 
 void SettingsDialog::loadSettings()

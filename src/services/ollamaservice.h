@@ -12,7 +12,7 @@ class OllamaService : public LLMService
     Q_OBJECT
 
 public:
-    explicit OllamaService(const QString& modelPath, QObject *parent = nullptr);
+    explicit OllamaService(const QString& modelName, QObject *parent = nullptr);
     ~OllamaService() override;
 
     QFuture<QString> generateResponse(const QString& prompt) override;
@@ -23,7 +23,7 @@ private slots:
     void handleResponse(QNetworkReply* reply);
 
 private:
-    QString m_modelPath;
+    QString m_modelName;
     QNetworkAccessManager* m_networkManager;
     QFutureInterface<QString> m_currentFuture;
 };

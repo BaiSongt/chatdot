@@ -257,14 +257,9 @@ void SettingsModel::updateOllamaConfiguredModels(QJsonArray& ollamaModels)
         QJsonObject models = ollamaConfig["models"].toObject();
         for (auto it = models.begin(); it != models.end(); ++it) {
             QString modelName = it.key();
-            if (isModelConfigComplete("ollama", modelName)) {
-                addModelToConfiguredList("ollama", modelName);
-                ollamaModels.append(modelName);
-            } else {
-                QStringList missingItems = getMissingConfigItems("ollama", modelName);
-                LOG_WARNING(QString("Ollama模型 %1 配置不完整，缺少: %2")
-                    .arg(modelName, missingItems.join(", ")));
-            }
+            // Ollama模型只需要名称即可
+            addModelToConfiguredList("ollama", modelName);
+            ollamaModels.append(modelName);
         }
     }
 }
@@ -375,17 +370,8 @@ bool SettingsModel::isModelConfigComplete(const QString& type, const QString& mo
         }
     }
     else if (type == "ollama") {
-        // 检查模型名称
-        if (!config.contains("name") || config["name"].toString().isEmpty()) {
-            return false;
-        }
-        // 检查主机和端口
-        if (!config.contains("host") || config["host"].toString().isEmpty()) {
-            return false;
-        }
-        if (!config.contains("port") || config["port"].toInt() <= 0) {
-            return false;
-        }
+        // Ollama模型只需要名称即可
+        return true;
     }
     else if (type == "local") {
         // 检查模型名称
@@ -436,17 +422,8 @@ QStringList SettingsModel::getMissingConfigItems(const QString& type, const QStr
         }
     }
     else if (type == "ollama") {
-        // 检查模型名称
-        if (!config.contains("name") || config["name"].toString().isEmpty()) {
-            missingItems << "name";
-        }
-        // 检查主机和端口
-        if (!config.contains("host") || config["host"].toString().isEmpty()) {
-            missingItems << "host";
-        }
-        if (!config.contains("port") || config["port"].toInt() <= 0) {
-            missingItems << "port";
-        }
+        // Ollama模型不需要额外检查
+        return missingItems;
     }
     else if (type == "local") {
         // 检查模型名称
@@ -1211,7 +1188,6 @@ void SettingsModel::setModelType(ModelType type)
                 break;
             case ModelType::Ollama:
                 typeStr = "Ollama";
-                refreshOllamaModels();
                 break;
             case ModelType::Local:
                 typeStr = "Local";
@@ -1244,16 +1220,42 @@ void SettingsModel::refreshOllamaModels()
         if (exitCode == 0 && exitStatus == QProcess::NormalExit) {
             QString output = QString::fromUtf8(process->readAllStandardOutput());
             QStringList models;
+            bool isFirstLine = true;
 
             // 解析输出获取模型列表
             for (const QString &line : output.split('\n')) {
-                if (!line.trimmed().isEmpty()) {
-                    QString modelName = line.split(' ').first();
+                QString trimmedLine = line.trimmed();
+                if (!trimmedLine.isEmpty()) {
+                    // 跳过第一行（表头）
+                    if (isFirstLine) {
+                        isFirstLine = false;
+                        continue;
+                    }
+                    QString modelName = trimmedLine.split(' ').first();
                     models.append(modelName);
                 }
             }
 
+            // 更新模型列表
             setOllamaModels(models);
+            
+            // 更新模型配置
+            QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
+            QJsonObject modelsObj;
+            
+            for (const QString& modelName : models) {
+                QJsonObject modelConfig;
+                modelConfig["enabled"] = true;
+                modelConfig["name"] = modelName;  // 添加 name 字段
+                modelsObj[modelName] = modelConfig;
+            }
+            
+            ollamaConfig["models"] = modelsObj;
+            m_models_config["ollama"] = ollamaConfig;
+            
+            // 更新已配置的模型列表
+            updateConfiguredModels();
+            
             LOG_INFO(QString("已刷新Ollama模型列表，共%1个模型").arg(models.size()));
         } else {
             QString error = QString::fromUtf8(process->readAllStandardError());

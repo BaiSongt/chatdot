@@ -70,12 +70,11 @@ LLMService* SettingsViewModel::createLLMService()
                 break;
             }
             case SettingsModel::ModelType::Ollama: {
-                QString modelPath = m_model->modelPath();
-                if (modelPath.isEmpty()) {
-                    LOG_ERROR("Ollama模型路径为空");
+                if (modelName.isEmpty()) {
+                    LOG_ERROR("Ollama模型名称为空");
                     return nullptr;
                 }
-                service = new OllamaService(modelPath);
+                service = new OllamaService(modelName);
                 break;
             }
             case SettingsModel::ModelType::Local: {

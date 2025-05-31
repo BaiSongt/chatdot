@@ -182,15 +182,21 @@ void MainWindow::setupUI()
 
     // 创建主布局
     m_mainLayout = new QVBoxLayout(m_centralWidget);
+    m_mainLayout->setSpacing(10);  // 设置组件之间的间距
+    m_mainLayout->setContentsMargins(10, 10, 10, 10);  // 设置边距
 
     // 顶部工具栏布局
     QHBoxLayout* topLayout = new QHBoxLayout();
+    topLayout->setSpacing(5);
 
     // 添加模型选择器
-    topLayout->addWidget(new QLabel(tr("当前模型:")));
+    QLabel* modelLabel = new QLabel(tr("当前模型:"));
+    modelLabel->setFixedWidth(80);  // 固定标签宽度
+    topLayout->addWidget(modelLabel);
+    
     m_modelSelector = new QComboBox();
     m_modelSelector->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    m_modelSelector->setMinimumWidth(200);
+    m_modelSelector->setMinimumWidth(100);
     topLayout->addWidget(m_modelSelector);
     topLayout->addStretch();
 
@@ -199,32 +205,46 @@ void MainWindow::setupUI()
     // 聊天显示区域
     m_chatDisplay = new QTextEdit(this);
     m_chatDisplay->setReadOnly(true);
-    m_chatDisplay->setMinimumHeight(400);
+    m_chatDisplay->setMinimumHeight(500);  // 增加聊天区域高度
     m_mainLayout->addWidget(m_chatDisplay);
 
     // 输入区域
     QHBoxLayout* inputLayout = new QHBoxLayout();
+    inputLayout->setSpacing(8);  // 设置按钮之间的间距
 
     m_messageInput = new QLineEdit(this);
     m_messageInput->setPlaceholderText(this->tr("输入消息..."));
     inputLayout->addWidget(m_messageInput);
 
+    // 创建按钮容器
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    buttonLayout->setSpacing(8);
+
     m_sendButton = new QPushButton(this->tr("发送"), this);
     m_sendButton->setIcon(style()->standardIcon(QStyle::SP_CommandLink));
-    inputLayout->addWidget(m_sendButton);
+    m_sendButton->setFixedWidth(80);
+    buttonLayout->addWidget(m_sendButton);
 
     m_clearButton = new QPushButton(this->tr("清除"), this);
     m_clearButton->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
-    inputLayout->addWidget(m_clearButton);
+    m_clearButton->setFixedWidth(80);
+    buttonLayout->addWidget(m_clearButton);
 
     m_imageButton = new QPushButton(this->tr("图片"), this);
     m_imageButton->setIcon(style()->standardIcon(QStyle::SP_FileIcon));
-    inputLayout->addWidget(m_imageButton);
+    m_imageButton->setFixedWidth(80);
+    buttonLayout->addWidget(m_imageButton);
 
+    inputLayout->addLayout(buttonLayout);
     m_mainLayout->addLayout(inputLayout);
 
-    // 设置窗口大小
-    resize(800, 600);
+    // 设置窗口大小为9:16比例
+    int width = 300;  // 基础宽度
+    int height = width * 16 / 9;  // 按9:16比例计算高度
+    resize(width, height);
+    
+    // 设置最小窗口大小
+    setMinimumSize(90, 160);  // 保持9:16比例的最小尺寸
 }
 
 void MainWindow::setupMenu()

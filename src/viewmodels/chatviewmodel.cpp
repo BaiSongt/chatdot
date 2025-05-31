@@ -11,6 +11,7 @@ ChatViewModel::ChatViewModel(ChatModel* model, QObject *parent)
     , m_llmService(nullptr)
     , m_isCancelled(false)
     , m_currentResponse("")
+    , m_isGenerating(false)
 {
 }
 
@@ -21,32 +22,26 @@ ChatViewModel::~ChatViewModel()
 
 void ChatViewModel::sendMessage(const QString& message)
 {
+    if (message.isEmpty()) {
+        return;
+    }
+
+    // 检查是否选择了AI模型
     if (!m_llmService) {
-        emit errorOccurred("未选择AI模型");
+        emit errorOccurred(tr("未选择AI模型，请先在设置中选择一个模型"));
         return;
     }
 
-    if (!m_llmService->isAvailable()) {
-        QString modelName = m_llmService->getModelName();
-        LOG_INFO(QString("模型 %1 不可用").arg(modelName));
-        emit errorOccurred(QString("AI模型 %1 不可用，请检查服务是否正常运行").arg(modelName));
-        return;
-    }
-
-    m_isCancelled = false;
-    m_currentResponse.clear();
-    emit generationStarted();
-
-    // 添加用户消息到模型
+    // 添加用户消息到聊天记录
     m_model->addMessage("user", message);
 
-    LOG_INFO(QString("发送消息到模型 %1").arg(m_llmService->getModelName()));
+    // 开始生成回复
+    emit generationStarted();
+    m_isGenerating = true;
+    m_isCancelled = false;
+    m_currentResponse.clear();
 
-    // 连接流式输出信号
-    connect(m_llmService, &LLMService::streamResponseReceived,
-            this, &ChatViewModel::handleStreamResponse,
-            Qt::UniqueConnection);
-
+    // 发送消息到AI服务
     QFuture<QString> future = m_llmService->generateResponse(message);
 
     // 使用QFuture的异步回调处理响应和错误
@@ -55,10 +50,12 @@ void ChatViewModel::sendMessage(const QString& message)
             LOG_INFO(QString("收到完整响应: %1字符").arg(response.length()));
             handleResponse(response);
         }
+        m_isGenerating = false;
         emit generationFinished();
     }).onFailed([this](const std::exception& e) {
         LOG_ERROR(QString("处理消息时发生错误: %1").arg(e.what()));
         handleError(QString::fromStdString(e.what()));
+        m_isGenerating = false;
         emit generationFinished();
     });
 }
@@ -113,17 +110,14 @@ void ChatViewModel::setLLMService(LLMService* service)
 
     // 设置新服务
     m_llmService = service;
-    if (!m_llmService) {
-        emit errorOccurred("未选择AI模型");
-        return;
+    if (m_llmService) {
+        // 连接新服务的信号
+        connect(m_llmService, &LLMService::streamResponseReceived,
+                this, &ChatViewModel::handleStreamResponse,
+                Qt::UniqueConnection);
+
+        LOG_INFO(QString("已切换到模型: %1").arg(m_llmService->getModelName()));
     }
-
-    // 连接新服务的信号
-    connect(m_llmService, &LLMService::streamResponseReceived,
-            this, &ChatViewModel::handleStreamResponse,
-            Qt::UniqueConnection);
-
-    LOG_INFO(QString("已切换到模型: %1").arg(m_llmService->getModelName()));
 }
 
 void ChatViewModel::clearChat()

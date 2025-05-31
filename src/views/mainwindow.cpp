@@ -120,10 +120,12 @@ MainWindow::MainWindow(QWidget *parent)
             throw;
         }
 
-        // 加载设置
+        // 加载设置并初始化模型选择器
         try {
             loadSettings();
-            LOG_INFO("设置加载完成");
+            // 初始化模型选择器
+            refreshModelList();
+            LOG_INFO("设置和模型选择器初始化完成");
         } catch (const std::exception& e) {
             LOG_ERROR("设置加载失败: " + QString(e.what()));
             throw;
@@ -461,7 +463,6 @@ void MainWindow::onModelSelectionChanged(int index)
     // 创建新的LLMService
     LLMService* service = m_settingsViewModel->createLLMService();
     if (!service) {
-        showError(tr("错误"), tr("无法初始化选中的模型，请检查设置"));
         // 恢复到之前的选择
         m_isUpdating = true;
         refreshModelList();

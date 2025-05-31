@@ -39,6 +39,7 @@ private:
     LLMService* m_llmService;
     bool m_isCancelled;
     QString m_currentResponse;
+    bool m_isGenerating;
 };
 
 #endif // CHATVIEWMODEL_H

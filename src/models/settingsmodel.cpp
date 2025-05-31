@@ -6,6 +6,7 @@
 #include <QStandardPaths>
 #include <QProcess>
 #include <QSettings>
+#include <QTimer>
 #include "services/logger.h"
 
 // 单例实现
@@ -17,26 +18,59 @@ SettingsModel& SettingsModel::instance()
 
 SettingsModel::SettingsModel(QObject *parent)
     : QObject(parent)
+    , m_saveTimer(new QTimer(this))
 {
     LOG_INFO("初始化 SettingsModel");
+    
+    // 设置延迟保存定时器
+    m_saveTimer->setSingleShot(true);
+    m_saveTimer->setInterval(1000); // 1秒延迟
+    connect(m_saveTimer, &QTimer::timeout, this, &SettingsModel::saveSettings);
+    
     loadSettings();
+}
+
+SettingsModel::~SettingsModel()
+{
+    // 确保在析构时保存设置
+    if (m_saveTimer->isActive()) {
+        m_saveTimer->stop();
+        saveSettings();
+    }
 }
 
 QString SettingsModel::getSettingsPath() const
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-           + "/settings.json";
+    QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (path.isEmpty()) {
+        LOG_ERROR("无法获取应用程序数据目录");
+        return QString();
+    }
+    
+    // 确保目录存在
+    QDir dir(path);
+    if (!dir.exists()) {
+        if (!dir.mkpath(".")) {
+            LOG_ERROR("无法创建设置目录");
+            return QString();
+        }
+    }
+    
+    return path + "/settings.json";
 }
 
 void SettingsModel::loadSettings()
 {
-    QFile file(getSettingsPath());
+    QString settingsPath = getSettingsPath();
+    if (settingsPath.isEmpty()) {
+        LOG_ERROR("无法获取设置文件路径");
+        return;
+    }
+
+    QFile file(settingsPath);
     if (!file.exists()) {
-        // 如果文件不存在，使用默认值
-        m_modelType = ModelType::API;
-        m_apiKey = "";
-        m_apiUrl = "https://api.openai.com/v1/chat/completions";
-        m_currentModelName = "gpt-3.5-turbo";
+        LOG_INFO("设置文件不存在，使用默认值");
+        setDefaultSettings();
         return;
     }
 
@@ -58,8 +92,14 @@ void SettingsModel::loadSettings()
     // 加载并解密 API 密钥
     if (obj.contains("apiKey")) {
         QString encryptedKey = obj["apiKey"].toString();
-        m_apiKey = Encryption::decrypt(encryptedKey);
-    }    // 加载其他设置
+        // m_apiKey = Encryption::decrypt(encryptedKey);
+        m_apiKey = encryptedKey;
+        if (m_apiKey.isEmpty()) {
+            LOG_WARNING("API密钥解密失败");
+        }
+    }
+
+    // 加载其他设置
     m_modelType = static_cast<ModelType>(obj.value("modelType").toInt(0));
     m_apiUrl = obj.value("apiUrl").toString("https://api.openai.com/v1/chat/completions");
     m_currentModelName = obj.value("currentModel").toString();
@@ -100,11 +140,24 @@ void SettingsModel::loadSettings()
 
 void SettingsModel::saveSettings()
 {
+    QString settingsPath = getSettingsPath();
+    if (settingsPath.isEmpty()) {
+        LOG_ERROR("无法获取设置文件路径");
+        return;
+    }
+
     QJsonObject obj;
 
     // 加密并保存 API 密钥
-    QString encryptedKey = Encryption::encrypt(m_apiKey);
-    obj["apiKey"] = encryptedKey;
+    if (!m_apiKey.isEmpty()) {
+        // QString encryptedKey = Encryption::encrypt(m_apiKey);
+        QString encryptedKey = m_apiKey;
+        if (!encryptedKey.isEmpty()) {
+            obj["apiKey"] = encryptedKey;
+        } else {
+            LOG_WARNING("API密钥加密失败");
+        }
+    }
 
     // 保存其他设置
     obj["modelType"] = static_cast<int>(m_modelType);
@@ -114,12 +167,8 @@ void SettingsModel::saveSettings()
 
     QJsonDocument doc(obj);
 
-    // 确保目录存在
-    QFileInfo fileInfo(getSettingsPath());
-    QDir().mkpath(fileInfo.absolutePath());
-
     // 保存到文件
-    QFile file(getSettingsPath());
+    QFile file(settingsPath);
     if (!file.open(QIODevice::WriteOnly)) {
         LOG_ERROR("无法保存配置文件");
         return;
@@ -131,12 +180,26 @@ void SettingsModel::saveSettings()
     LOG_INFO("设置保存完成");
 }
 
+void SettingsModel::setDefaultSettings()
+{
+    m_modelType = ModelType::API;
+    m_apiKey = "";
+    m_apiUrl = "https://api.openai.com/v1/chat/completions";
+    m_currentModelName = "gpt-3.5-turbo";
+    m_modelPath = "";
+}
+
+void SettingsModel::scheduleSave()
+{
+    m_saveTimer->start();
+}
+
 void SettingsModel::setApiKey(const QString &apiKey)
 {
     if (m_apiKey != apiKey) {
         m_apiKey = apiKey;
         LOG_INFO("API密钥已更新");
-        saveSettings();
+        scheduleSave();
         emit apiKeyChanged();
     }
 }
@@ -146,7 +209,7 @@ void SettingsModel::setModelPath(const QString &modelPath)
     if (m_modelPath != modelPath) {
         m_modelPath = modelPath;
         LOG_INFO(QString("模型路径已更新: %1").arg(modelPath));
-        saveSettings();
+        scheduleSave();
         emit modelPathChanged();
     }
 }
@@ -156,7 +219,7 @@ void SettingsModel::setApiUrl(const QString &apiUrl)
     if (m_apiUrl != apiUrl) {
         m_apiUrl = apiUrl;
         LOG_INFO(QString("API地址已更新: %1").arg(apiUrl));
-        saveSettings();
+        scheduleSave();
         emit apiUrlChanged();
     }
 }
@@ -179,7 +242,7 @@ void SettingsModel::setModelType(ModelType type)
                 break;
         }
         LOG_INFO(QString("模型类型已更新: %1").arg(typeStr));
-        saveSettings();
+        scheduleSave();
         emit modelTypeChanged();
     }
 }
@@ -189,7 +252,7 @@ void SettingsModel::setCurrentModelName(const QString &name)
     if (m_currentModelName != name) {
         m_currentModelName = name;
         LOG_INFO(QString("当前模型已更新: %1").arg(name));
-        saveSettings();
+        scheduleSave();
         emit currentModelNameChanged(name);
     }
 }

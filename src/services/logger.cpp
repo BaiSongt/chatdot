@@ -29,13 +29,18 @@ void Logger::init()
         return;
     }
 
+    qDebug() << "Logger::init() 开始执行";
+
     // 创建日志目录
     QString logDir = QCoreApplication::applicationDirPath() + "/logs";
-    QDir().mkpath(logDir);
+    qDebug() << "日志目录路径:" << logDir;
+    bool mkdirSuccess = QDir().mkpath(logDir);
+    qDebug() << "创建日志目录结果:" << mkdirSuccess;
 
     // 设置日志文件
     QString logPath = logDir + "/chatdot_" + 
                      QDateTime::currentDateTime().toString("yyyy-MM-dd") + ".log";
+    qDebug() << "日志文件路径:" << logPath;
     m_logFile.setFileName(logPath);
     
     if (!m_logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
@@ -44,7 +49,7 @@ void Logger::init()
     }
 
     m_logStream.setDevice(&m_logFile);
-    m_logStream.setEncoding(QStringConverter::Utf8);
+    // m_logStream.setEncoding(QStringConverter::Utf8);
     
     m_initialized = true;
     LOG_INFO("日志系统初始化完成");

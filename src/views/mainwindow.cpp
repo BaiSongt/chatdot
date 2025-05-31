@@ -15,48 +15,138 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
+    , m_chatModel(nullptr)
+    , m_imageModel(nullptr)
+    , m_settingsModel(nullptr)
+    , m_chatViewModel(nullptr)
+    , m_settingsViewModel(nullptr)
+    , m_centralWidget(nullptr)
+    , m_mainLayout(nullptr)
+    , m_chatDisplay(nullptr)
+    , m_messageInput(nullptr)
+    , m_sendButton(nullptr)
+    , m_clearButton(nullptr)
+    , m_imageButton(nullptr)
+    , m_modelSelector(nullptr)
+    , m_statusLabel(nullptr)
+    , m_isGenerating(false)
+    , m_settingsAction(nullptr)
+    , m_saveChatAction(nullptr)
+    , m_loadChatAction(nullptr)
+    , m_aboutAction(nullptr)
 {
-    LOG_INFO("开始初始化主窗口...");    // 初始化模型
-    m_chatModel = new ChatModel(this);
-    m_imageModel = new ImageModel(this);
-    m_settingsModel = &SettingsModel::instance(); // 使用单例
+    try {
+        LOG_INFO("开始初始化主窗口...");
 
-    LOG_INFO("模型初始化完成");
+        // 初始化模型
+        try {
+            m_chatModel = new ChatModel(this);
+            if (!m_chatModel) {
+                throw std::runtime_error("无法创建 ChatModel");
+            }
+            m_imageModel = new ImageModel(this);
+            if (!m_imageModel) {
+                throw std::runtime_error("无法创建 ImageModel");
+            }
+            m_settingsModel = &SettingsModel::instance();
+            if (!m_settingsModel) {
+                throw std::runtime_error("无法获取 SettingsModel 实例");
+            }
+            LOG_INFO("模型初始化完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("模型初始化失败: " + QString(e.what()));
+            throw;
+        }
 
-    // 初始化视图模型
-    m_chatViewModel = new ChatViewModel(m_chatModel, this);
-    m_settingsViewModel = new SettingsViewModel(m_settingsModel, this);
+        // 初始化视图模型
+        try {
+            m_chatViewModel = new ChatViewModel(m_chatModel, this);
+            if (!m_chatViewModel) {
+                throw std::runtime_error("无法创建 ChatViewModel");
+            }
+            m_settingsViewModel = new SettingsViewModel(m_settingsModel, this);
+            if (!m_settingsViewModel) {
+                throw std::runtime_error("无法创建 SettingsViewModel");
+            }
+            LOG_INFO("视图模型初始化完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("视图模型初始化失败: " + QString(e.what()));
+            throw;
+        }
 
-    LOG_INFO("视图模型初始化完成");
+        // 设置UI
+        try {
+            setupUI();
+            if (!m_centralWidget || !m_mainLayout || !m_chatDisplay || 
+                !m_messageInput || !m_sendButton || !m_clearButton || 
+                !m_imageButton || !m_modelSelector) {
+                throw std::runtime_error("UI组件创建失败");
+            }
+            LOG_INFO("UI设置完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("UI设置失败: " + QString(e.what()));
+            throw;
+        }
 
-    // 设置UI
-    setupUI();
-    LOG_INFO("UI设置完成");
+        // 设置菜单
+        try {
+            setupMenu();
+            if (!m_settingsAction || !m_saveChatAction || 
+                !m_loadChatAction || !m_aboutAction) {
+                throw std::runtime_error("菜单项创建失败");
+            }
+            LOG_INFO("菜单设置完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("菜单设置失败: " + QString(e.what()));
+            throw;
+        }
 
-    // 设置菜单
-    setupMenu();
-    LOG_INFO("菜单设置完成");
+        // 设置状态栏
+        try {
+            setupStatusBar();
+            LOG_INFO("状态栏设置完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("状态栏设置失败: " + QString(e.what()));
+            throw;
+        }
 
-    // 设置状态栏
-    setupStatusBar();
-    LOG_INFO("状态栏设置完成");
+        // 设置信号连接
+        try {
+            setupConnections();
+            LOG_INFO("信号连接设置完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("信号连接设置失败: " + QString(e.what()));
+            throw;
+        }
 
-    // 设置信号连接
-    setupConnections();
-    LOG_INFO("信号连接设置完成");
+        // 加载设置
+        try {
+            loadSettings();
+            LOG_INFO("设置加载完成");
+        } catch (const std::exception& e) {
+            LOG_ERROR("设置加载失败: " + QString(e.what()));
+            throw;
+        }
 
-    // 加载设置
-    loadSettings();
-    LOG_INFO("设置加载完成");
+        // 连接日志信号
+        connect(&Logger::instance(), &Logger::logMessage,
+                this, &MainWindow::onLogMessage);
 
-    // 连接日志信号
-    connect(&Logger::instance(), &Logger::logMessage,
-            this, &MainWindow::onLogMessage);
+        // 设置窗口标题
+        setWindowTitle(this->tr("ChatDot - AI聊天助手"));
 
-    // 设置窗口标题
-    setWindowTitle(this->tr("ChatDot - AI聊天助手"));
-
-    LOG_INFO("主窗口初始化完成");
+        LOG_INFO("主窗口初始化完成");
+    } catch (const std::exception& e) {
+        LOG_ERROR("主窗口初始化过程中发生异常: " + QString(e.what()));
+        QMessageBox::critical(this, tr("错误"), 
+            tr("主窗口初始化失败: %1").arg(e.what()));
+        throw;
+    } catch (...) {
+        LOG_ERROR("主窗口初始化过程中发生未知异常");
+        QMessageBox::critical(this, tr("错误"), 
+            tr("主窗口初始化过程中发生未知异常"));
+        throw;
+    }
 }
 
 MainWindow::~MainWindow()

@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QTimer>
 #include "utils/encryption.h"
 
 class SettingsModel : public QObject
@@ -62,9 +63,12 @@ signals:
 
 private:
     explicit SettingsModel(QObject *parent = nullptr);
-    ~SettingsModel() = default;
+    ~SettingsModel();
     SettingsModel(const SettingsModel&) = delete;
     SettingsModel& operator=(const SettingsModel&) = delete;
+
+    void setDefaultSettings();
+    void scheduleSave();
 
     QString m_apiKey;
     QString m_modelPath;
@@ -72,6 +76,7 @@ private:
     ModelType m_modelType = ModelType::API;
     QString m_currentModelName;
     QStringList m_ollamaModels;
+    QTimer* m_saveTimer;
 };
 
 #endif // SETTINGSMODEL_H

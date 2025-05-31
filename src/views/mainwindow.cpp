@@ -3,6 +3,7 @@
 #include <QStyle>
 #include <QDateTime>
 #include <QScrollBar>
+#include <QActionGroup>
 #include "models/chatmodel.h"
 #include "models/imagemodel.h"
 #include "models/settingsmodel.h"
@@ -286,12 +287,40 @@ void MainWindow::setupMenu()
     QMenu* settingsMenu = menuBar->addMenu(this->tr("设置"));
     m_settingsAction = settingsMenu->addAction(this->tr("首选项"));
 
+    // 主题菜单
+    m_themeMenu = menuBar->addMenu(tr("主题"));
+    m_lightThemeAction = new QAction(tr("浅色主题"), this);
+    m_darkThemeAction = new QAction(tr("深色主题"), this);
+    m_systemThemeAction = new QAction(tr("跟随系统"), this);
+
+    // 设置动作为可检查
+    m_lightThemeAction->setCheckable(true);
+    m_darkThemeAction->setCheckable(true);
+    m_systemThemeAction->setCheckable(true);
+
+    // 创建动作组，确保单选
+    QActionGroup* themeGroup = new QActionGroup(this);
+    themeGroup->addAction(m_lightThemeAction);
+    themeGroup->addAction(m_darkThemeAction);
+    themeGroup->addAction(m_systemThemeAction);
+    themeGroup->setExclusive(true);
+
+    // 添加动作到菜单
+    m_themeMenu->addAction(m_lightThemeAction);
+    m_themeMenu->addAction(m_darkThemeAction);
+    m_themeMenu->addAction(m_systemThemeAction);
+
+    // 连接动作的信号
+    connect(m_lightThemeAction, &QAction::triggered, this, &MainWindow::setLightTheme);
+    connect(m_darkThemeAction, &QAction::triggered, this, &MainWindow::setDarkTheme);
+    connect(m_systemThemeAction, &QAction::triggered, this, &MainWindow::setSystemTheme);
+
     // 帮助菜单
     QMenu* helpMenu = menuBar->addMenu(this->tr("帮助"));
     m_aboutAction = helpMenu->addAction(this->tr("关于"));
 
-    // 创建主题菜单
-    createThemeMenu();
+    // 设置当前主题的选中状态
+    updateThemeActions();
 }
 
 void MainWindow::setupStatusBar()
@@ -943,31 +972,7 @@ void MainWindow::onDeepThinkingToggled(bool checked)
 
 void MainWindow::createThemeMenu()
 {
-    // 创建主题菜单
-    m_themeMenu = menuBar()->addMenu(tr("主题"));
-
-    // 创建主题动作
-    m_lightThemeAction = new QAction(tr("浅色主题"), this);
-    m_darkThemeAction = new QAction(tr("深色主题"), this);
-    m_systemThemeAction = new QAction(tr("跟随系统"), this);
-
-    // 设置动作为可检查
-    m_lightThemeAction->setCheckable(true);
-    m_darkThemeAction->setCheckable(true);
-    m_systemThemeAction->setCheckable(true);
-
-    // 添加动作到菜单
-    m_themeMenu->addAction(m_lightThemeAction);
-    m_themeMenu->addAction(m_darkThemeAction);
-    m_themeMenu->addAction(m_systemThemeAction);
-
-    // 连接动作的信号
-    connect(m_lightThemeAction, &QAction::triggered, this, &MainWindow::setLightTheme);
-    connect(m_darkThemeAction, &QAction::triggered, this, &MainWindow::setDarkTheme);
-    connect(m_systemThemeAction, &QAction::triggered, this, &MainWindow::setSystemTheme);
-
-    // 设置当前主题的选中状态
-    updateThemeActions();
+    // 这个方法不再需要，因为主题菜单已经在 setupMenu 中创建
 }
 
 void MainWindow::onThemeChanged(ThemeManager::Theme theme)
@@ -993,7 +998,19 @@ void MainWindow::setSystemTheme()
 void MainWindow::updateThemeActions()
 {
     ThemeManager::Theme currentTheme = ThemeManager::instance().currentTheme();
+    
+    // 断开所有动作的信号连接，防止触发不必要的主题切换
+    m_lightThemeAction->blockSignals(true);
+    m_darkThemeAction->blockSignals(true);
+    m_systemThemeAction->blockSignals(true);
+    
+    // 更新选中状态
     m_lightThemeAction->setChecked(currentTheme == ThemeManager::Theme::Light);
     m_darkThemeAction->setChecked(currentTheme == ThemeManager::Theme::Dark);
     m_systemThemeAction->setChecked(currentTheme == ThemeManager::Theme::System);
+    
+    // 恢复信号连接
+    m_lightThemeAction->blockSignals(false);
+    m_darkThemeAction->blockSignals(false);
+    m_systemThemeAction->blockSignals(false);
 }

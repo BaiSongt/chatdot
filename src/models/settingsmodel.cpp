@@ -63,17 +63,29 @@ void SettingsModel::initializeDefaultModels()
 {
     // 初始化 API 模型配置
     QJsonObject apiModels;
-    QJsonObject openai;
-    openai["name"] = "gpt-3.5-turbo";
-    openai["url"] = "https://api.openai.com/v1/chat/completions";
-    openai["enabled"] = true;
-    apiModels["openai"] = openai;
+    
+    // OpenAI 模型
+    QJsonObject gpt35;
+    gpt35["name"] = "gpt-3.5-turbo";
+    gpt35["provider"] = "OpenAI";
+    gpt35["url"] = "https://api.openai.com/v1/chat/completions";
+    gpt35["enabled"] = true;
+    apiModels["gpt-3.5-turbo"] = gpt35;
 
+    QJsonObject gpt4;
+    gpt4["name"] = "gpt-4";
+    gpt4["provider"] = "OpenAI";
+    gpt4["url"] = "https://api.openai.com/v1/chat/completions";
+    gpt4["enabled"] = true;
+    apiModels["gpt-4"] = gpt4;
+
+    // Deepseek 模型
     QJsonObject deepseek;
     deepseek["name"] = "deepseek-chat";
+    deepseek["provider"] = "Deepseek";
     deepseek["url"] = "https://api.deepseek.com/v1/chat/completions";
     deepseek["enabled"] = true;
-    apiModels["deepseek"] = deepseek;
+    apiModels["deepseek-chat"] = deepseek;
 
     m_models["api"] = apiModels;
 
@@ -149,32 +161,55 @@ void SettingsModel::loadSettings()
 
     // 根据不同的模型类型设置默认值
     switch (m_modelType) {
-        case ModelType::API:
+        case ModelType::API: {
             if (m_currentModelName.isEmpty()) {
                 m_currentModelName = "gpt-3.5-turbo";
             }
+            // 从模型配置中获取 API URL
+            QJsonObject config = getModelConfig("api", m_currentModelName);
+            if (!config.isEmpty()) {
+                m_apiUrl = config["url"].toString();
+                LOG_INFO(QString("从配置加载 API URL: %1").arg(m_apiUrl));
+            } else {
+                LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+            }
             break;
-
-        case ModelType::Ollama:
+        }
+        case ModelType::Ollama: {
             if (m_currentModelName.isEmpty()) {
                 m_currentModelName = m_appState["ollamaModel"].toString();
             }
             refreshOllamaModels();
             break;
-
-        case ModelType::Local:
+        }
+        case ModelType::Local: {
             if (!m_modelPath.isEmpty() && m_currentModelName.isEmpty()) {
                 m_currentModelName = QFileInfo(m_modelPath).fileName();
             }
+            // 从模型配置中获取模型路径
+            QJsonObject config = getModelConfig("local", m_currentModelName);
+            if (!config.isEmpty()) {
+                m_modelPath = config["path"].toString();
+                LOG_INFO(QString("从配置加载模型路径: %1").arg(m_modelPath));
+            } else {
+                LOG_WARNING(QString("未找到模型 %1 的配置").arg(m_currentModelName));
+            }
             break;
+        }
     }
 
-    LOG_INFO(QString("设置加载完成，当前模型类型: %1，模型名称: %2")
+    LOG_INFO(QString("设置加载完成，当前模型类型: %1，模型名称: %2，API URL: %3，模型路径: %4")
              .arg(static_cast<int>(m_modelType))
-             .arg(m_currentModelName));
+             .arg(m_currentModelName)
+             .arg(m_apiUrl)
+             .arg(m_modelPath));
 
-    emit currentModelNameChanged(m_currentModelName);
+    // 发送所有必要的信号
+    emit apiKeyChanged();
     emit modelTypeChanged();
+    emit currentModelNameChanged(m_currentModelName);
+    emit apiUrlChanged();
+    emit modelPathChanged();
 }
 
 void SettingsModel::saveSettings()
@@ -325,6 +360,17 @@ void SettingsModel::setApiUrl(const QString &apiUrl)
     if (m_apiUrl != apiUrl) {
         m_apiUrl = apiUrl;
         LOG_INFO(QString("API地址已更新: %1").arg(apiUrl));
+        
+        // 如果是 API 类型，更新当前模型的配置
+        if (m_modelType == ModelType::API && !m_currentModelName.isEmpty()) {
+            QJsonObject config = getModelConfig("api", m_currentModelName);
+            if (!config.isEmpty()) {
+                config["url"] = apiUrl;
+                setModelConfig("api", m_currentModelName, config);
+                LOG_INFO(QString("已更新模型 %1 的 API URL 配置").arg(m_currentModelName));
+            }
+        }
+        
         scheduleSave();
         emit apiUrlChanged();
     }

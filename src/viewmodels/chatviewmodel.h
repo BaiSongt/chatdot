@@ -6,6 +6,9 @@
 #include <QString>
 #include "models/chatmodel.h"
 #include "services/llmservice.h"
+#include "services/apiservice.h"
+#include "services/ollamaservice.h"
+#include "services/localmodelservice.h"
 
 class ChatViewModel : public QObject
 {
@@ -19,6 +22,11 @@ public:
     Q_INVOKABLE void clearChat();
     Q_INVOKABLE void cancelGeneration();
 
+    // 设置和获取 LLMService
+    void setLLMService(LLMService* service);
+    bool hasLLMService() const { return m_llmService != nullptr; }
+    QString getServiceStatus() const;
+
 signals:
     void responseReceived(const QString& response);
     void errorOccurred(const QString& error);
@@ -27,9 +35,6 @@ signals:
     void streamResponse(const QString& partialResponse);
 
 public slots:
-    void setLLMService(LLMService* service);
-
-private slots:
     void handleResponse(const QString& response);
     void handleError(const QString& error);
     void handleStreamResponse(const QString& partialResponse);

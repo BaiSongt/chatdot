@@ -126,3 +126,23 @@ void ChatViewModel::clearChat()
     m_model->clearMessages();
     LOG_INFO("聊天记录已清除");
 }
+
+QString ChatViewModel::getServiceStatus() const
+{
+    if (!m_llmService) {
+        return "未设置服务";
+    }
+
+    QString status;
+    if (dynamic_cast<APIService*>(m_llmService)) {
+        status = "API服务";
+    } else if (dynamic_cast<OllamaService*>(m_llmService)) {
+        status = "Ollama服务";
+    } else if (dynamic_cast<LocalModelService*>(m_llmService)) {
+        status = "本地服务";
+    } else {
+        status = "未知服务类型";
+    }
+
+    return status;
+}

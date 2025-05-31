@@ -883,24 +883,29 @@ QJsonObject SettingsModel::getModelConfig(const QString& type, const QString& na
             return typeConfig;
         }
         
-        // 对于按提供商组织的模型（如 API 类型）
-        if (typeConfig.contains("has_API") && typeConfig["has_API"].toBool()) {
+        // 对于 API 类型
+        if (type == "api") {
             // 遍历所有提供商
             for (auto providerIt = typeConfig.begin(); providerIt != typeConfig.end(); ++providerIt) {
                 if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
                     providerIt.value().isObject()) {
-                    QJsonObject providerModels = providerIt.value().toObject();
-                    if (providerModels.contains(name)) {
-                        QJsonObject modelConfig = providerModels[name].toObject();
-                        modelConfig["provider"] = providerIt.key();
-                        modelConfig["url"] = modelConfig["url"].toString().isEmpty() ? 
-                            typeConfig["default_url"].toString() : modelConfig["url"].toString();
-                        return modelConfig;
+                    QJsonObject providerConfig = providerIt.value().toObject();
+                    if (providerConfig.contains("models")) {
+                        QJsonObject models = providerConfig["models"].toObject();
+                        if (models.contains(name)) {
+                            QJsonObject modelConfig = models[name].toObject();
+                            modelConfig["provider"] = providerIt.key();
+                            // 如果模型没有指定 url，使用提供商的 default_url
+                            if (!modelConfig.contains("url") || modelConfig["url"].toString().isEmpty()) {
+                                modelConfig["url"] = providerConfig["default_url"].toString();
+                            }
+                            return modelConfig;
+                        }
                     }
                 }
             }
         }
-        // 对于直接组织的模型（如 Ollama 和本地模型）
+        // 对于其他类型（如 Ollama 和本地模型）
         else if (typeConfig.contains("models")) {
             QJsonObject modelsObj = typeConfig["models"].toObject();
             if (modelsObj.contains(name)) {

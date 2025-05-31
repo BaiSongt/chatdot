@@ -353,76 +353,17 @@ void MainWindow::updateModelList()
     m_modelSelector->clear();
 
     // 获取当前类型下已配置的模型列表
-    QStringList availableModels;
-    QString modelType;
-    
-    // 根据当前模型类型获取配置
-    switch (m_settingsModel->modelType()) {
-        case SettingsModel::ModelType::API:
-            modelType = "api";
-            break;
-        case SettingsModel::ModelType::Ollama:
-            modelType = "ollama";
-            break;
-        case SettingsModel::ModelType::Local:
-            modelType = "local";
-            break;
-        default:
-            LOG_WARNING("未知的模型类型");
-            break;
-    }
-
-    // 获取已配置的模型列表
-    availableModels = m_settingsModel->getConfiguredModels(modelType);
+    QString modelType = getModelTypeString();
+    QStringList availableModels = m_settingsModel->getConfiguredModels(modelType);
     LOG_INFO(QString("获取到 %1 类型已配置的模型列表，共 %2 个模型").arg(modelType).arg(availableModels.size()));
 
     // 根据不同类型处理模型列表
     if (modelType == "api") {
-        // 处理 API 模型
-        QJsonObject apiConfig = m_settingsModel->getModelConfig("api", "");
-        for (const QString& modelName : availableModels) {
-            // 遍历所有提供商查找模型
-            for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
-                if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
-                    providerIt.value().isObject()) {
-                    QString provider = providerIt.key();
-                    QJsonObject providerConfig = providerIt.value().toObject();
-                    if (providerConfig.contains("models")) {
-                        QJsonObject models = providerConfig["models"].toObject();
-                        if (models.contains(modelName)) {
-                            QJsonObject modelConfig = models[modelName].toObject();
-                            QString displayName = QString("%1: %2")
-                                .arg(provider)
-                                .arg(modelConfig["name"].toString(modelName));
-                            m_modelSelector->addItem(displayName, modelName);
-                            LOG_INFO(QString("添加 API 模型: %1").arg(displayName));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        updateApiModels(availableModels);
     } else if (modelType == "ollama") {
-        // 处理 Ollama 模型
-        for (const QString& modelName : availableModels) {
-            QJsonObject config = m_settingsModel->getModelConfig("ollama", modelName);
-            if (config["enabled"].toBool(true)) {
-                QString displayName = QString("Ollama: %1").arg(modelName);
-                m_modelSelector->addItem(displayName, modelName);
-                LOG_INFO(QString("添加 Ollama 模型: %1").arg(displayName));
-            }
-        }
+        updateOllamaModels(availableModels);
     } else if (modelType == "local") {
-        // 处理本地模型
-        for (const QString& modelName : availableModels) {
-            QJsonObject config = m_settingsModel->getModelConfig("local", modelName);
-            if (config["enabled"].toBool(true)) {
-                QString displayName = QString("本地: %1")
-                    .arg(config["name"].toString(modelName));
-                m_modelSelector->addItem(displayName, modelName);
-                LOG_INFO(QString("添加本地模型: %1").arg(displayName));
-            }
-        }
+        updateLocalModels(availableModels);
     }
 
     // 如果没有可用的模型，添加提示信息
@@ -432,6 +373,92 @@ void MainWindow::updateModelList()
     }
 
     // 恢复之前选择的模型
+    restoreModelSelection(currentModel);
+
+    // 恢复信号连接
+    m_modelSelector->blockSignals(false);
+
+    LOG_INFO(QString("模型列表更新完成，当前选择: %1，可用模型数量: %2")
+        .arg(m_modelSelector->currentText())
+        .arg(availableModels.size()));
+}
+
+void MainWindow::updateApiModels(const QStringList& availableModels)
+{
+    QJsonObject apiConfig = m_settingsModel->getModelConfig("models_config", "");
+    for (const QString& modelName : availableModels) {
+        // 遍历所有提供商查找模型
+        for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+            if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
+                providerIt.value().isObject()) {
+                QString provider = providerIt.key();
+                QJsonObject providerConfig = providerIt.value().toObject();
+                if (providerConfig.contains("models")) {
+                    QJsonObject models = providerConfig["models"].toObject();
+                    if (models.contains(modelName)) {
+                        bool isComplete = m_settingsModel->isModelConfigComplete("models_config", modelName);
+                        QStringList missingItems;
+                        if (!isComplete) {
+                            missingItems = m_settingsModel->getMissingConfigItems("models_config", modelName);
+                        }
+                        QString displayName = getModelDisplayName("models_config", modelName, provider);
+                        addModelToSelector(displayName, modelName, isComplete, missingItems);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void MainWindow::updateOllamaModels(const QStringList& availableModels)
+{
+    for (const QString& modelName : availableModels) {
+        QJsonObject config = m_settingsModel->getModelConfig("ollama", modelName);
+        if (config["enabled"].toBool(true)) {
+            bool isComplete = m_settingsModel->isModelConfigComplete("ollama", modelName);
+            QStringList missingItems;
+            if (!isComplete) {
+                missingItems = m_settingsModel->getMissingConfigItems("ollama", modelName);
+            }
+            QString displayName = getModelDisplayName("ollama", modelName);
+            addModelToSelector(displayName, modelName, isComplete, missingItems);
+        }
+    }
+}
+
+void MainWindow::updateLocalModels(const QStringList& availableModels)
+{
+    for (const QString& modelName : availableModels) {
+        QJsonObject config = m_settingsModel->getModelConfig("local", modelName);
+        if (config["enabled"].toBool(true)) {
+            bool isComplete = m_settingsModel->isModelConfigComplete("local", modelName);
+            QStringList missingItems;
+            if (!isComplete) {
+                missingItems = m_settingsModel->getMissingConfigItems("local", modelName);
+            }
+            QString displayName = getModelDisplayName("local", modelName);
+            addModelToSelector(displayName, modelName, isComplete, missingItems);
+        }
+    }
+}
+
+void MainWindow::addModelToSelector(const QString& displayName, const QString& modelName, bool isComplete, const QStringList& missingItems)
+{
+    if (isComplete) {
+        m_modelSelector->addItem(displayName, modelName);
+        LOG_INFO(QString("添加模型: %1").arg(displayName));
+    } else {
+        QString incompleteDisplayName = QString("%1 (配置不完整: %2)")
+            .arg(displayName)
+            .arg(missingItems.join(", "));
+        m_modelSelector->addItem(incompleteDisplayName, modelName);
+        LOG_WARNING(QString("添加未完整配置的模型: %1").arg(incompleteDisplayName));
+    }
+}
+
+void MainWindow::restoreModelSelection(const QString& currentModel)
+{
     int index = -1;
     if (!currentModel.isEmpty()) {
         // 先尝试通过 modelName 匹配
@@ -456,13 +483,38 @@ void MainWindow::updateModelList()
         m_modelSelector->setCurrentIndex(0);
         LOG_INFO(QString("选择第一个模型: %1").arg(m_modelSelector->currentText()));
     }
+}
 
-    // 恢复信号连接
-    m_modelSelector->blockSignals(false);
+QString MainWindow::getModelTypeString() const
+{
+    switch (m_settingsModel->modelType()) {
+        case SettingsModel::ModelType::API:
+            return "api";
+        case SettingsModel::ModelType::Ollama:
+            return "ollama";
+        case SettingsModel::ModelType::Local:
+            return "local";
+        default:
+            LOG_WARNING("未知的模型类型");
+            return "api";
+    }
+}
 
-    LOG_INFO(QString("模型列表更新完成，当前选择: %1，可用模型数量: %2")
-        .arg(m_modelSelector->currentText())
-        .arg(availableModels.size()));
+QString MainWindow::getModelDisplayName(const QString& type, const QString& modelName, const QString& provider) const
+{
+    if (type == "api") {
+        QJsonObject config = m_settingsModel->getModelConfig(type, modelName);
+        return QString("%1: %2")
+            .arg(provider)
+            .arg(config["name"].toString(modelName));
+    } else if (type == "ollama") {
+        return QString("Ollama: %1").arg(modelName);
+    } else if (type == "local") {
+        QJsonObject config = m_settingsModel->getModelConfig(type, modelName);
+        return QString("本地: %1")
+            .arg(config["name"].toString(modelName));
+    }
+    return modelName;
 }
 
 void MainWindow::onModelSelectionChanged(int index)

@@ -125,7 +125,7 @@ void SettingsModel::initializeDefaultModels()
     localConfig["models"] = QJsonObject();
     models["local"] = localConfig;
 
-    m_models = models;
+    m_models_config = models;
     
     // 初始化已配置的模型列表
     updateConfiguredModels();
@@ -136,8 +136,8 @@ void SettingsModel::migrateConfig()
     LOG_INFO("开始迁移配置到新结构");
     
     // 检查是否需要迁移
-    if (m_models.contains("api") && m_models["api"].isObject()) {
-        QJsonObject apiConfig = m_models["api"].toObject();
+    if (m_models_config.contains("api") && m_models_config["api"].isObject()) {
+        QJsonObject apiConfig = m_models_config["api"].toObject();
         if (apiConfig.contains("has_API")) {
             // 需要迁移
             QJsonObject newApiConfig;
@@ -145,7 +145,7 @@ void SettingsModel::migrateConfig()
             // 迁移 OpenAI 配置
             if (apiConfig.contains("OpenAI")) {
                 QJsonObject openaiConfig;
-                openaiConfig["api_key"] = m_apiKey; // 迁移现有的 API Key
+                openaiConfig["api_key"] = ""; // 需要用户重新配置
                 openaiConfig["default_url"] = "https://api.openai.com/v1/chat/completions";
                 openaiConfig["models"] = apiConfig["OpenAI"].toObject();
                 newApiConfig["OpenAI"] = openaiConfig;
@@ -160,7 +160,7 @@ void SettingsModel::migrateConfig()
                 newApiConfig["Deepseek"] = deepseekConfig;
             }
             
-            m_models["api"] = newApiConfig;
+            m_models_config["api"] = newApiConfig;
             LOG_INFO("API 配置迁移完成");
         }
     }
@@ -175,79 +175,311 @@ void SettingsModel::migrateConfig()
 
 void SettingsModel::updateConfiguredModels()
 {
-    QJsonObject configuredModels;
-    
-    // 处理 API 模型
-    if (m_models.contains("api") && m_models["api"].isObject()) {
-        QJsonObject apiConfig = m_models["api"].toObject();
-        QJsonArray apiModels;
-        
-        // 遍历所有提供商
-        for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
-            if (providerIt.value().isObject()) {
-                QJsonObject providerConfig = providerIt.value().toObject();
+    LOG_INFO("开始更新已配置的模型列表");
+    m_configuredModels = QJsonObject();
+
+    // 更新各类型的已配置模型
+    QJsonArray apiModels;
+    QJsonArray ollamaModels;
+    QJsonArray localModels;
+
+    updateApiConfiguredModels(apiModels);
+    updateOllamaConfiguredModels(ollamaModels);
+    updateLocalConfiguredModels(localModels);
+
+    // 保存更新后的模型列表
+    m_configuredModels["api"] = apiModels;
+    m_configuredModels["ollama"] = ollamaModels;
+    m_configuredModels["local"] = localModels;
+
+    logConfiguredModelsSummary();
+}
+
+void SettingsModel::updateApiConfiguredModels(QJsonArray& apiModels)
+{
+    if (!m_models_config.contains("api")) {
+        return;
+    }
+
+    QJsonObject apiConfig = m_models_config["api"].toObject();
+    for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
+        if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
+            providerIt.value().isObject()) {
+            QString provider = providerIt.key();
+            QJsonObject providerConfig = providerIt.value().toObject();
+            
+            if (isProviderConfigComplete(provider, providerConfig)) {
                 if (providerConfig.contains("models")) {
                     QJsonObject models = providerConfig["models"].toObject();
                     for (auto modelIt = models.begin(); modelIt != models.end(); ++modelIt) {
-                        if (modelIt.value().isObject()) {
-                            QJsonObject modelConfig = modelIt.value().toObject();
-                            if (modelConfig["enabled"].toBool(true)) {
-                                apiModels.append(modelIt.key());
-                            }
+                        QString modelName = modelIt.key();
+                        if (isModelConfigComplete("api", modelName)) {
+                            addModelToConfiguredList("api", modelName, provider);
+                            apiModels.append(modelName);
+                        } else {
+                            QStringList missingItems = getMissingConfigItems("api", modelName);
+                            LOG_WARNING(QString("API模型 %1 配置不完整，缺少: %2")
+                                .arg(modelName, missingItems.join(", ")));
                         }
                     }
                 }
+            } else {
+                QStringList missingItems = getMissingProviderConfigItems(provider, providerConfig);
+                LOG_WARNING(QString("API提供商 %1 配置不完整，缺少: %2")
+                    .arg(provider, missingItems.join(", ")));
             }
         }
-        configuredModels["api"] = apiModels;
+    }
+}
+
+void SettingsModel::updateOllamaConfiguredModels(QJsonArray& ollamaModels)
+{
+    if (!m_models_config.contains("ollama")) {
+        return;
+    }
+
+    QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
+    if (ollamaConfig.contains("models")) {
+        QJsonObject models = ollamaConfig["models"].toObject();
+        for (auto it = models.begin(); it != models.end(); ++it) {
+            QString modelName = it.key();
+            if (isModelConfigComplete("ollama", modelName)) {
+                addModelToConfiguredList("ollama", modelName);
+                ollamaModels.append(modelName);
+            } else {
+                QStringList missingItems = getMissingConfigItems("ollama", modelName);
+                LOG_WARNING(QString("Ollama模型 %1 配置不完整，缺少: %2")
+                    .arg(modelName, missingItems.join(", ")));
+            }
+        }
+    }
+}
+
+void SettingsModel::updateLocalConfiguredModels(QJsonArray& localModels)
+{
+    if (!m_models_config.contains("local")) {
+        return;
+    }
+
+    QJsonObject localConfig = m_models_config["local"].toObject();
+    if (localConfig.contains("models")) {
+        QJsonObject models = localConfig["models"].toObject();
+        for (auto it = models.begin(); it != models.end(); ++it) {
+            QString modelName = it.key();
+            if (isModelConfigComplete("local", modelName)) {
+                addModelToConfiguredList("local", modelName);
+                localModels.append(modelName);
+            } else {
+                QStringList missingItems = getMissingConfigItems("local", modelName);
+                LOG_WARNING(QString("本地模型 %1 配置不完整，缺少: %2")
+                    .arg(modelName, missingItems.join(", ")));
+            }
+        }
+    }
+}
+
+void SettingsModel::addModelToConfiguredList(const QString& type, const QString& modelName, const QString& provider)
+{
+    QString logMessage;
+    if (type == "api") {
+        logMessage = QString("添加已配置的API模型: %1 (提供商: %2)").arg(modelName, provider);
+    } else if (type == "ollama") {
+        logMessage = QString("添加已配置的Ollama模型: %1").arg(modelName);
+    } else if (type == "local") {
+        logMessage = QString("添加已配置的本地模型: %1").arg(modelName);
+    }
+    LOG_INFO(logMessage);
+}
+
+void SettingsModel::logConfiguredModelsSummary()
+{
+    LOG_INFO(QString("已配置的模型列表更新完成，API: %1, Ollama: %2, 本地: %3")
+        .arg(m_configuredModels["api"].toArray().size())
+        .arg(m_configuredModels["ollama"].toArray().size())
+        .arg(m_configuredModels["local"].toArray().size()));
+}
+
+bool SettingsModel::isProviderConfigComplete(const QString& provider, const QJsonObject& config) const
+{
+    // 检查必需的提供商配置项
+    if (!config.contains("api_key") || config["api_key"].toString().isEmpty()) {
+        return false;
+    }
+    if (!config.contains("default_url") || config["default_url"].toString().isEmpty()) {
+        return false;
+    }
+    if (!config.contains("models") || !config["models"].isObject()) {
+        return false;
+    }
+    return true;
+}
+
+QStringList SettingsModel::getMissingProviderConfigItems(const QString& provider, const QJsonObject& config) const
+{
+    QStringList missingItems;
+    
+    if (!config.contains("api_key") || config["api_key"].toString().isEmpty()) {
+        missingItems << "api_key";
+    }
+    if (!config.contains("default_url") || config["default_url"].toString().isEmpty()) {
+        missingItems << "default_url";
+    }
+    if (!config.contains("models") || !config["models"].isObject()) {
+        missingItems << "models";
     }
     
-    // 处理 Ollama 模型
-    if (m_models.contains("ollama") && m_models["ollama"].isObject()) {
-        QJsonObject ollamaConfig = m_models["ollama"].toObject();
-        QJsonArray ollamaModels;
-        
-        if (ollamaConfig.contains("models")) {
-            QJsonObject models = ollamaConfig["models"].toObject();
-            for (auto it = models.begin(); it != models.end(); ++it) {
-                if (it.value().isObject()) {
-                    QJsonObject modelConfig = it.value().toObject();
-                    if (modelConfig["enabled"].toBool(true)) {
-                        ollamaModels.append(it.key());
-                    }
+    return missingItems;
+}
+
+bool SettingsModel::isModelConfigComplete(const QString& type, const QString& modelName) const
+{
+    QJsonObject config = getModelConfig(type, modelName);
+    
+    // 检查模型是否启用
+    if (!config["enabled"].toBool(true)) {
+        return false;
+    }
+
+    // 根据不同类型检查必需的配置项
+    if (type == "api") {
+        // 检查模型名称
+        if (!config.contains("name") || config["name"].toString().isEmpty()) {
+            return false;
+        }
+        // 检查API URL
+        if (!config.contains("url") || config["url"].toString().isEmpty()) {
+            return false;
+        }
+        // 检查提供商配置
+        QString provider = getProviderForModel(modelName);
+        if (provider.isEmpty()) {
+            return false;
+        }
+        QJsonObject providerConfig = m_models_config["api"].toObject()[provider].toObject();
+        if (!isProviderConfigComplete(provider, providerConfig)) {
+            return false;
+        }
+    }
+    else if (type == "ollama") {
+        // 检查模型名称
+        if (!config.contains("name") || config["name"].toString().isEmpty()) {
+            return false;
+        }
+        // 检查主机和端口
+        if (!config.contains("host") || config["host"].toString().isEmpty()) {
+            return false;
+        }
+        if (!config.contains("port") || config["port"].toInt() <= 0) {
+            return false;
+        }
+    }
+    else if (type == "local") {
+        // 检查模型名称
+        if (!config.contains("name") || config["name"].toString().isEmpty()) {
+            return false;
+        }
+        // 检查模型路径
+        if (!config.contains("path") || config["path"].toString().isEmpty()) {
+            return false;
+        }
+        // 检查模型文件是否存在
+        QString path = config["path"].toString();
+        if (!QFile::exists(path)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+QStringList SettingsModel::getMissingConfigItems(const QString& type, const QString& modelName) const
+{
+    QStringList missingItems;
+    QJsonObject config = getModelConfig(type, modelName);
+    
+    // 检查模型是否启用
+    if (!config["enabled"].toBool(true)) {
+        missingItems << "enabled";
+    }
+
+    // 根据不同类型检查必需的配置项
+    if (type == "api") {
+        // 检查模型名称
+        if (!config.contains("name") || config["name"].toString().isEmpty()) {
+            missingItems << "name";
+        }
+        // 检查API URL
+        if (!config.contains("url") || config["url"].toString().isEmpty()) {
+            missingItems << "url";
+        }
+        // 检查提供商配置
+        QString provider = getProviderForModel(modelName);
+        if (provider.isEmpty()) {
+            missingItems << "provider";
+        } else {
+            QJsonObject providerConfig = m_models_config["api"].toObject()[provider].toObject();
+            missingItems << getMissingProviderConfigItems(provider, providerConfig);
+        }
+    }
+    else if (type == "ollama") {
+        // 检查模型名称
+        if (!config.contains("name") || config["name"].toString().isEmpty()) {
+            missingItems << "name";
+        }
+        // 检查主机和端口
+        if (!config.contains("host") || config["host"].toString().isEmpty()) {
+            missingItems << "host";
+        }
+        if (!config.contains("port") || config["port"].toInt() <= 0) {
+            missingItems << "port";
+        }
+    }
+    else if (type == "local") {
+        // 检查模型名称
+        if (!config.contains("name") || config["name"].toString().isEmpty()) {
+            missingItems << "name";
+        }
+        // 检查模型路径
+        if (!config.contains("path") || config["path"].toString().isEmpty()) {
+            missingItems << "path";
+        }
+        // 检查模型文件是否存在
+        QString path = config["path"].toString();
+        if (!QFile::exists(path)) {
+            missingItems << "path (文件不存在)";
+        }
+    }
+
+    return missingItems;
+}
+
+QString SettingsModel::getProviderForModel(const QString& modelName) const
+{
+    if (!m_models_config.contains("api")) {
+        return QString();
+    }
+
+    QJsonObject apiConfig = m_models_config["api"].toObject();
+    for (auto it = apiConfig.begin(); it != apiConfig.end(); ++it) {
+        if (it.key() != "has_API" && it.key() != "default_url" && 
+            it.value().isObject()) {
+            QString provider = it.key();
+            QJsonObject providerConfig = it.value().toObject();
+            if (providerConfig.contains("models")) {
+                QJsonObject models = providerConfig["models"].toObject();
+                if (models.contains(modelName)) {
+                    return provider;
                 }
             }
         }
-        configuredModels["ollama"] = ollamaModels;
     }
-    
-    // 处理本地模型
-    if (m_models.contains("local") && m_models["local"].isObject()) {
-        QJsonObject localConfig = m_models["local"].toObject();
-        QJsonArray localModels;
-        
-        if (localConfig.contains("models")) {
-            QJsonObject models = localConfig["models"].toObject();
-            for (auto it = models.begin(); it != models.end(); ++it) {
-                if (it.value().isObject()) {
-                    QJsonObject modelConfig = it.value().toObject();
-                    if (modelConfig["enabled"].toBool(true)) {
-                        localModels.append(it.key());
-                    }
-                }
-            }
-        }
-        configuredModels["local"] = localModels;
-    }
-    
-    m_configuredModels = configuredModels;
-    LOG_INFO("已更新配置的模型列表");
+    return QString();
 }
 
 QJsonObject SettingsModel::getProviderConfig(const QString& type, const QString& provider) const
 {
-    if (m_models.contains(type) && m_models[type].isObject()) {
-        QJsonObject typeConfig = m_models[type].toObject();
+    if (m_models_config.contains(type) && m_models_config[type].isObject()) {
+        QJsonObject typeConfig = m_models_config[type].toObject();
         if (typeConfig.contains(provider)) {
             return typeConfig[provider].toObject();
         }
@@ -263,15 +495,25 @@ QString SettingsModel::getProviderApiKey(const QString& type, const QString& pro
 
 void SettingsModel::setProviderApiKey(const QString& type, const QString& provider, const QString& apiKey)
 {
-    if (m_models.contains(type) && m_models[type].isObject()) {
-        QJsonObject typeConfig = m_models[type].toObject();
+    if (m_models_config.contains(type) && m_models_config[type].isObject()) {
+        QJsonObject typeConfig = m_models_config[type].toObject();
         if (typeConfig.contains(provider)) {
             QJsonObject providerConfig = typeConfig[provider].toObject();
             providerConfig["api_key"] = apiKey;
             typeConfig[provider] = providerConfig;
-            m_models[type] = typeConfig;
+            m_models_config[type] = typeConfig;
+            
+            // 如果当前正在使用这个提供商，更新 API Key
+            if (m_modelType == ModelType::API && m_currentProvider == provider) {
+                m_apiKey = apiKey;
+            }
+            
+            // 更新已配置的模型列表
+            updateConfiguredModels();
+            
             scheduleSave();
             emit apiKeyChanged();
+            LOG_INFO(QString("已更新提供商 %1 的 API Key").arg(provider));
         }
     }
 }
@@ -378,8 +620,8 @@ void SettingsModel::loadSettings()
     QJsonObject root = doc.object();
     
     // 加载模型配置
-    if (root.contains("models")) {
-        m_models = root["models"].toObject();
+    if (root.contains("models_config")) {
+        m_models_config = root["models_config"].toObject();
         LOG_INFO("已加载模型配置");
     } else {
         LOG_INFO("未找到模型配置，使用默认配置");
@@ -412,7 +654,7 @@ void SettingsModel::loadSettings()
                 m_currentModelName = "gpt-3.5-turbo";
             }
             // 从模型配置中获取提供商和 API URL
-            QJsonObject apiConfig = m_models["api"].toObject();
+            QJsonObject apiConfig = m_models_config["api"].toObject();
             for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
                 if (providerIt.value().isObject()) {
                     QJsonObject providerConfig = providerIt.value().toObject();
@@ -434,7 +676,7 @@ void SettingsModel::loadSettings()
         case ModelType::Ollama: {
             if (m_currentModelName.isEmpty()) {
                 // 获取 Ollama 配置
-                QJsonObject ollamaConfig = m_models["ollama"].toObject();
+                QJsonObject ollamaConfig = m_models_config["ollama"].toObject();
                 m_ollamaUrl = ollamaConfig["default_url"].toString();
                 LOG_INFO(QString("使用默认 Ollama URL: %1").arg(m_ollamaUrl));
             }
@@ -488,19 +730,19 @@ void SettingsModel::loadSettings()
     if (root.contains("proxyEnabled")) {
         m_proxyEnabled = root["proxyEnabled"].toBool();
     }
-    if (root.contains("proxyHost")) {
+    if (!m_proxyHost.isEmpty()) {
         m_proxyHost = root["proxyHost"].toString();
     }
-    if (root.contains("proxyPort")) {
+    if (m_proxyPort != 80) {
         m_proxyPort = root["proxyPort"].toInt();
     }
     if (root.contains("proxyType")) {
         m_proxyType = root["proxyType"].toString();
     }
-    if (root.contains("proxyUsername")) {
+    if (!m_proxyUsername.isEmpty()) {
         m_proxyUsername = root["proxyUsername"].toString();
     }
-    if (root.contains("proxyPassword")) {
+    if (!m_proxyPassword.isEmpty()) {
         m_proxyPassword = root["proxyPassword"].toString();
     }
 
@@ -536,7 +778,7 @@ void SettingsModel::saveSettings()
     obj["appState"] = appState;
 
     // 保存模型配置
-    obj["models"] = m_models;
+    obj["models_config"] = m_models_config;
 
     // 保存已配置的模型列表
     obj["configured_models"] = m_configuredModels;
@@ -633,8 +875,8 @@ QJsonValue SettingsModel::appStateValue(const QString& key) const
 
 QJsonObject SettingsModel::getModelConfig(const QString& type, const QString& name) const
 {
-    if (m_models.contains(type) && m_models[type].isObject()) {
-        QJsonObject typeConfig = m_models[type].toObject();
+    if (m_models_config.contains(type) && m_models_config[type].isObject()) {
+        QJsonObject typeConfig = m_models_config[type].toObject();
         
         // 如果 name 为空，返回整个类型的配置
         if (name.isEmpty()) {
@@ -671,12 +913,48 @@ QJsonObject SettingsModel::getModelConfig(const QString& type, const QString& na
 
 void SettingsModel::setModelConfig(const QString& type, const QString& name, const QJsonObject& config)
 {
-    if (!m_models.contains(type)) {
-        m_models[type] = QJsonObject();
+    if (!m_models_config.contains(type)) {
+        m_models_config[type] = QJsonObject();
     }
-    QJsonObject typeObj = m_models[type].toObject();
-    typeObj[name] = config;
-    m_models[type] = typeObj;
+    
+    QJsonObject typeConfig = m_models_config[type].toObject();
+    
+    if (type == "api") {
+        // 对于 API 类型，需要找到模型所属的提供商
+        for (auto providerIt = typeConfig.begin(); providerIt != typeConfig.end(); ++providerIt) {
+            if (providerIt.value().isObject()) {
+                QJsonObject providerConfig = providerIt.value().toObject();
+                if (providerConfig.contains("models")) {
+                    QJsonObject models = providerConfig["models"].toObject();
+                    if (models.contains(name)) {
+                        models[name] = config;
+                        providerConfig["models"] = models;
+                        typeConfig[providerIt.key()] = providerConfig;
+                        m_models_config[type] = typeConfig;
+                        
+                        // 更新已配置的模型列表
+                        updateConfiguredModels();
+                        
+                        scheduleSave();
+                        emit modelConfigChanged();
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    // 对于其他类型，直接更新配置
+    if (!typeConfig.contains("models")) {
+        typeConfig["models"] = QJsonObject();
+    }
+    QJsonObject models = typeConfig["models"].toObject();
+    models[name] = config;
+    typeConfig["models"] = models;
+    m_models_config[type] = typeConfig;
+    
+    // 更新已配置的模型列表
+    updateConfiguredModels();
+    
     scheduleSave();
     emit modelConfigChanged();
 }
@@ -684,8 +962,8 @@ void SettingsModel::setModelConfig(const QString& type, const QString& name, con
 QStringList SettingsModel::getAvailableModels(const QString& type) const
 {
     QStringList models;
-    if (m_models.contains(type) && m_models[type].isObject()) {
-        QJsonObject typeConfig = m_models[type].toObject();
+    if (m_models_config.contains(type) && m_models_config[type].isObject()) {
+        QJsonObject typeConfig = m_models_config[type].toObject();
         if (typeConfig.contains("models")) {
             QJsonObject modelsObj = typeConfig["models"].toObject();
             for (auto it = modelsObj.begin(); it != modelsObj.end(); ++it) {

@@ -288,9 +288,14 @@ void SettingsDialog::saveSettings()
     settings.setValue("timeout", m_timeoutSpin->value());
 
     // 保存API设置
-    settings.setValue("apiUrl", m_apiUrlInput->text());
-    settings.setValue("apiKey", m_apiKeyInput->text());
-    settings.setValue("apiModel", m_apiModelSelector->currentText());
+    QString apiUrl = m_apiUrlInput->text();
+    QString apiKey = m_apiKeyInput->text();
+    QString provider = m_apiProviderSelector->currentText();
+    QString modelName = m_apiModelSelector->currentText();
+
+    settings.setValue("apiUrl", apiUrl);
+    settings.setValue("apiKey", apiKey);
+    settings.setValue("apiModel", modelName);
 
     // 保存Ollama设置
     settings.setValue("ollamaHost", m_ollamaHostInput->text());
@@ -306,14 +311,26 @@ void SettingsDialog::saveSettings()
             m_modelTypeSelector->currentData().toInt());
 
         m_model->setModelType(type);
-        m_model->setApiUrl(m_apiUrlInput->text());
-        m_model->setApiKey(m_apiKeyInput->text());
+        m_model->setApiUrl(apiUrl);
 
         // 根据不同的模型类型设置相应的配置
         switch (type) {
-            case SettingsModel::ModelType::API:
-                m_model->setCurrentModelName(m_apiModelSelector->currentText());
+            case SettingsModel::ModelType::API: {
+                // 设置 API Key
+                m_model->setProviderApiKey("api", provider, apiKey);
+                
+                // 设置模型配置
+                QJsonObject modelConfig;
+                modelConfig["name"] = modelName;
+                modelConfig["url"] = apiUrl;
+                modelConfig["enabled"] = true;
+                m_model->setModelConfig("api", modelName, modelConfig);
+                
+                // 设置当前模型
+                m_model->setCurrentModelName(modelName);
+                LOG_INFO(QString("设置 API 模型: %1, 提供商: %2").arg(modelName, provider));
                 break;
+            }
 
             case SettingsModel::ModelType::Ollama:
                 if (!m_ollamaModelSelect->currentText().isEmpty()) {

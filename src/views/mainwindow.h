@@ -58,6 +58,15 @@ private:
     void refreshModelList();
     void updateSendButton(bool isGenerating);
 
+    // 模型列表更新相关方法
+    void updateApiModels(const QStringList& availableModels);
+    void updateOllamaModels(const QStringList& availableModels);
+    void updateLocalModels(const QStringList& availableModels);
+    void addModelToSelector(const QString& displayName, const QString& modelName, bool isComplete, const QStringList& missingItems = QStringList());
+    void restoreModelSelection(const QString& currentModel);
+    QString getModelTypeString() const;
+    QString getModelDisplayName(const QString& type, const QString& modelName, const QString& provider = QString()) const;
+
     // Models
     ChatModel* m_chatModel;
     ImageModel* m_imageModel;

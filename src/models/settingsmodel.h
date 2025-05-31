@@ -144,6 +144,21 @@ public:
     // 获取当前模型的 URL
     QString getCurrentApiUrl() const;
 
+    // 检查模型配置是否完整
+    bool isModelConfigComplete(const QString& type, const QString& modelName) const;
+    
+    // 检查提供商配置是否完整
+    bool isProviderConfigComplete(const QString& provider, const QJsonObject& config) const;
+    
+    // 获取模型配置缺失项
+    QStringList getMissingConfigItems(const QString& type, const QString& modelName) const;
+
+    // 获取提供商配置缺失项
+    QStringList getMissingProviderConfigItems(const QString& provider, const QJsonObject& config) const;
+
+    // 获取模型对应的提供商
+    QString getProviderForModel(const QString& modelName) const;
+
 signals:
     void apiKeyChanged();
     void modelPathChanged();
@@ -178,7 +193,7 @@ private:
     QString m_ollamaUrl;
     QTimer* m_saveTimer;
     QJsonObject m_appState;
-    QJsonObject m_models;
+    QJsonObject m_models_config;
     QJsonObject m_configuredModels;
     QString m_currentProvider;
 
@@ -202,6 +217,20 @@ private:
     void initializeDefaultModels();
     void migrateConfig();
     void updateConfiguredModels();
+
+    // 验证模型配置
+    bool validateModelConfig(const QString& type, const QString& modelName) const;
+    
+    // 验证提供商配置
+    bool validateProviderConfig(const QString& type, const QString& provider) const;
+
+    // 更新已配置的模型列表相关方法
+    void updateApiConfiguredModels(QJsonArray& apiModels);
+    void updateOllamaConfiguredModels(QJsonArray& ollamaModels);
+    void updateLocalConfiguredModels(QJsonArray& localModels);
+    void updateConfiguredModelsForType(const QString& type, QJsonArray& models);
+    void addModelToConfiguredList(const QString& type, const QString& modelName, const QString& provider = QString());
+    void logConfiguredModelsSummary();
 };
 
 #endif // SETTINGSMODEL_H

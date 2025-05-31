@@ -410,6 +410,29 @@ void MainWindow::updateModelList()
     // 恢复信号连接
     m_modelSelector->blockSignals(false);
 
+    // 自动触发一次模型切换，确保服务被设置
+    if (m_modelSelector->count() > 0) {
+        int idx = m_modelSelector->currentIndex();
+        if (idx >= 0) {
+            QString selectedModel = m_modelSelector->currentData().toString();
+            if (!selectedModel.isEmpty()) {
+                // 先清理当前的服务
+                if (m_chatViewModel) {
+                    m_chatViewModel->setLLMService(nullptr);
+                }
+                
+                // 创建新的LLMService
+                LLMService* service = m_settingsViewModel->createLLMService();
+                if (service) {
+                    m_chatViewModel->setLLMService(service);
+                    LOG_INFO(QString("成功创建并设置模型服务: %1").arg(selectedModel));
+                } else {
+                    LOG_ERROR(QString("创建模型服务失败: %1").arg(selectedModel));
+                }
+            }
+        }
+    }
+
     LOG_INFO(QString("模型列表更新完成，当前选择: %1，可用模型数量: %2")
         .arg(m_modelSelector->currentText())
         .arg(availableModels.size()));
@@ -593,6 +616,7 @@ void MainWindow::onModelSelectionChanged(int index)
     // 创建新的LLMService
     LLMService* service = m_settingsViewModel->createLLMService();
     if (!service) {
+        LOG_ERROR(QString("创建模型服务失败: %1").arg(modelName));
         // 恢复到之前的选择
         m_isUpdating = true;
         updateModelList();  // 只更新列表，不刷新服务

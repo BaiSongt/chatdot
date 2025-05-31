@@ -46,15 +46,26 @@ LLMService* SettingsViewModel::createLLMService()
             case SettingsModel::ModelType::API: {
                 QString apiKey = m_model->apiKey();
                 QString apiUrl = m_model->apiUrl();
+                
+                LOG_INFO(QString("API配置 - Key长度: %1, URL: %2").arg(apiKey.length()).arg(apiUrl));
+                
                 if (apiKey.isEmpty()) {
+                    LOG_ERROR("API密钥未配置");
                     emit errorOccurred("API密钥未配置");
                     return nullptr;
                 }
                 if (apiUrl.isEmpty()) {
+                    LOG_ERROR("API地址未配置");
                     emit errorOccurred("API地址未配置");
                     return nullptr;
                 }
+                
                 service = new APIService(apiKey, apiUrl, modelName, this);
+                if (!service) {
+                    LOG_ERROR("创建API服务失败");
+                    emit errorOccurred("创建API服务失败");
+                    return nullptr;
+                }
                 break;
             }
             case SettingsModel::ModelType::Ollama: {
@@ -62,19 +73,35 @@ LLMService* SettingsViewModel::createLLMService()
                 if (modelName.startsWith("Ollama: ")) {
                     modelName = modelName.mid(8);
                 }
+                LOG_INFO(QString("创建Ollama服务，模型: %1").arg(modelName));
                 service = new OllamaService(modelName, this);
+                if (!service) {
+                    LOG_ERROR("创建Ollama服务失败");
+                    emit errorOccurred("创建Ollama服务失败");
+                    return nullptr;
+                }
                 break;
             }
             case SettingsModel::ModelType::Local: {
                 QString modelPath = m_model->modelPath();
+                LOG_INFO(QString("创建本地模型服务，路径: %1").arg(modelPath));
+                
                 if (modelPath.isEmpty()) {
+                    LOG_ERROR("本地模型路径未配置");
                     emit errorOccurred("本地模型路径未配置");
                     return nullptr;
                 }
+                
                 service = new LocalModelService(modelPath, this);
+                if (!service) {
+                    LOG_ERROR("创建本地模型服务失败");
+                    emit errorOccurred("创建本地模型服务失败");
+                    return nullptr;
+                }
                 break;
             }
             default: {
+                LOG_ERROR(QString("未知的模型类型: %1").arg(static_cast<int>(m_model->modelType())));
                 emit errorOccurred("未知的模型类型");
                 return nullptr;
             }
@@ -88,6 +115,7 @@ LLMService* SettingsViewModel::createLLMService()
             return nullptr;
         }
 
+        LOG_INFO(QString("成功创建服务: %1").arg(service->getModelName()));
         return service;
     } catch (const std::exception& e) {
         LOG_ERROR(QString("创建模型服务失败: %1").arg(e.what()));

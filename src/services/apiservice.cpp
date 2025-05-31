@@ -12,8 +12,21 @@ APIService::APIService(const QString& apiKey, const QString& apiUrl, const QStri
     , m_currentModelName(modelName)
     , m_networkManager(new QNetworkAccessManager(this))
 {
+    if (apiKey.isEmpty()) {
+        LOG_ERROR("API Key 为空");
+    }
+    if (apiUrl.isEmpty()) {
+        LOG_ERROR("API URL 为空");
+    }
+    if (modelName.isEmpty()) {
+        LOG_ERROR("模型名称为空");
+    }
+
     m_provider = getProviderFromUrl(apiUrl);
-    LOG_INFO(QString("初始化 API 服务: %1, 模型: %2").arg(m_provider, m_currentModelName));
+    LOG_INFO(QString("初始化 API 服务: %1, 模型: %2, URL: %3")
+        .arg(m_provider)
+        .arg(m_currentModelName)
+        .arg(m_apiUrl));
 }
 
 APIService::~APIService()

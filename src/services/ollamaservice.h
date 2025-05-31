@@ -24,6 +24,7 @@ private slots:
 
 private:
     QString m_modelName;
+    QString m_currentResponse;  // 用于累积流式响应
     QNetworkAccessManager* m_networkManager;
     QFutureInterface<QString> m_currentFuture;
 };

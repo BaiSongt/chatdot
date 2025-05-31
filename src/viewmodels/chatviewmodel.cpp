@@ -96,8 +96,9 @@ void ChatViewModel::cancelGeneration()
 void ChatViewModel::handleStreamResponse(const QString& partialResponse)
 {
     if (!m_isCancelled) {
-        m_currentResponse += partialResponse;
+        m_currentResponse = partialResponse;
         emit streamResponse(partialResponse);
+        // LOG_INFO(QString("收到流式响应: %1").arg(partialResponse));
     }
 }
 
@@ -131,7 +132,15 @@ void ChatViewModel::setLLMService(LLMService* service)
         // 连接新服务的信号
         connect(m_llmService, &LLMService::streamResponseReceived,
                 this, &ChatViewModel::handleStreamResponse,
-                Qt::UniqueConnection);
+                Qt::QueuedConnection);  // 使用 QueuedConnection 确保在主线程中处理
+
+        connect(m_llmService, &LLMService::responseGenerated,
+                this, &ChatViewModel::handleResponse,
+                Qt::QueuedConnection);
+
+        connect(m_llmService, &LLMService::errorOccurred,
+                this, &ChatViewModel::handleError,
+                Qt::QueuedConnection);
 
         LOG_INFO(QString("已切换到模型: %1").arg(m_llmService->getModelName()));
     }

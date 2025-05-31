@@ -21,6 +21,7 @@
 #include "viewmodels/settingsviewmodel.h"
 #include "services/logger.h"
 #include "views/settingsdialog.h"
+#include "themes/theme.h"
 
 class MainWindow : public QMainWindow
 {
@@ -45,6 +46,11 @@ private slots:
     void onGenerationFinished();
     void onStreamResponse(const QString& partialResponse);
     void onDeepThinkingToggled(bool checked);
+    void createThemeMenu();
+    void onThemeChanged(ThemeManager::Theme theme);
+    void setLightTheme();
+    void setDarkTheme();
+    void setSystemTheme();
 
 private:
     void setupUI();
@@ -97,6 +103,12 @@ private:
     QAction* m_saveChatAction;
     QAction* m_loadChatAction;
     QAction* m_aboutAction;
+
+    QMenu *m_themeMenu;
+    QAction *m_lightThemeAction;
+    QAction *m_darkThemeAction;
+    QAction *m_systemThemeAction;
+    void updateThemeActions();
 };
 
 #endif // MAINWINDOW_H

@@ -1,0 +1,220 @@
+/* 颜色变量 */
+:root {
+    --primary-color: #2196F3;
+    --primary-light: #64B5F6;
+    --primary-dark: #1976D2;
+    --accent-color: #FF4081;
+    --text-primary: #212121;
+    --text-secondary: #757575;
+    --background: #FFFFFF;
+    --surface: #F5F5F5;
+    --error: #F44336;
+    --success: #4CAF50;
+    --warning: #FFC107;
+    --border: #E0E0E0;
+}
+
+/* 主窗口样式 */
+QMainWindow {
+    background-color: var(--background);
+    color: var(--text-primary);
+}
+
+/* 菜单栏样式 */
+QMenuBar {
+    background-color: var(--background);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border);
+}
+
+QMenuBar::item {
+    padding: 4px 8px;
+    background-color: transparent;
+}
+
+QMenuBar::item:selected {
+    background-color: var(--primary-light);
+    color: white;
+}
+
+QMenu {
+    background-color: var(--background);
+    border: 1px solid var(--border);
+}
+
+QMenu::item {
+    padding: 4px 24px 4px 24px;
+}
+
+QMenu::item:selected {
+    background-color: var(--primary-light);
+    color: white;
+}
+
+/* 聊天界面样式 */
+QScrollArea {
+    border: none;
+    background-color: var(--background);
+}
+
+QTextEdit {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    background-color: var(--background);
+    color: var(--text-primary);
+}
+
+/* 输入框样式 */
+QLineEdit {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    background-color: var(--background);
+    color: var(--text-primary);
+}
+
+QLineEdit:focus {
+    border: 1px solid var(--primary-color);
+}
+
+/* 按钮样式 */
+QPushButton {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    min-width: 80px;
+}
+
+QPushButton:hover {
+    background-color: var(--primary-light);
+}
+
+QPushButton:pressed {
+    background-color: var(--primary-dark);
+}
+
+QPushButton:disabled {
+    background-color: var(--border);
+    color: var(--text-secondary);
+}
+
+/* 工具栏样式 */
+QToolBar {
+    background-color: var(--background);
+    border-bottom: 1px solid var(--border);
+    spacing: 4px;
+    padding: 4px;
+}
+
+QToolButton {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QToolButton:hover {
+    background-color: var(--primary-light);
+}
+
+QToolButton:pressed {
+    background-color: var(--primary-dark);
+}
+
+/* 状态栏样式 */
+QStatusBar {
+    background-color: var(--background);
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border);
+}
+
+/* 对话框样式 */
+QDialog {
+    background-color: var(--background);
+}
+
+/* 标签样式 */
+QLabel {
+    color: var(--text-primary);
+}
+
+/* 复选框样式 */
+QCheckBox {
+    color: var(--text-primary);
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+
+QCheckBox::indicator:unchecked {
+    border: 1px solid var(--border);
+    background-color: var(--background);
+}
+
+QCheckBox::indicator:checked {
+    border: 1px solid var(--primary-color);
+    background-color: var(--primary-color);
+}
+
+/* 下拉框样式 */
+QComboBox {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    background-color: var(--background);
+    color: var(--text-primary);
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+    background: var(--primary-color);
+    border-radius: 2px;
+}
+
+/* 滚动条样式 */
+QScrollBar:vertical {
+    border: none;
+    background-color: var(--surface);
+    width: 8px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: var(--primary-light);
+    border-radius: 4px;
+    min-height: 20px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: var(--surface);
+    height: 8px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: var(--primary-light);
+    border-radius: 4px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+} 

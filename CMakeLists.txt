@@ -53,6 +53,9 @@ set(PROJECT_SOURCES
     src/services/localmodelservice.h
     src/services/logger.cpp
     src/services/logger.h
+    src/themes/theme.cpp
+    src/themes/theme.h
+    resources.qrc
     # src/utils/encryption.h
 )
 

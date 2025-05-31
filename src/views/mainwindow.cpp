@@ -12,6 +12,7 @@
 #include "views/settingsdialog.h"
 #include <QDir>
 #include <QFileInfo>
+#include "themes/theme.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -37,6 +38,10 @@ MainWindow::MainWindow(QWidget *parent)
     , m_aboutAction(nullptr)
     , m_deepThinkingButton(nullptr)
     , m_isDeepThinking(false)
+    , m_themeMenu(nullptr)
+    , m_lightThemeAction(nullptr)
+    , m_darkThemeAction(nullptr)
+    , m_systemThemeAction(nullptr)
 {
     try {
         LOG_INFO("开始初始化主窗口...");
@@ -137,6 +142,13 @@ MainWindow::MainWindow(QWidget *parent)
 
         // 设置窗口标题
         setWindowTitle(this->tr("ChatDot - AI聊天助手"));
+
+        // 创建主题菜单
+        createThemeMenu();
+
+        // 连接主题管理器的信号
+        connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
+                this, &MainWindow::onThemeChanged);
 
         LOG_INFO("主窗口初始化完成");
     } catch (const std::exception& e) {
@@ -277,6 +289,9 @@ void MainWindow::setupMenu()
     // 帮助菜单
     QMenu* helpMenu = menuBar->addMenu(this->tr("帮助"));
     m_aboutAction = helpMenu->addAction(this->tr("关于"));
+
+    // 创建主题菜单
+    createThemeMenu();
 }
 
 void MainWindow::setupStatusBar()
@@ -924,4 +939,61 @@ void MainWindow::onDeepThinkingToggled(bool checked)
     }
     
     LOG_INFO(QString("深度思考模式: %1").arg(checked ? "开启" : "关闭"));
+}
+
+void MainWindow::createThemeMenu()
+{
+    // 创建主题菜单
+    m_themeMenu = menuBar()->addMenu(tr("主题"));
+
+    // 创建主题动作
+    m_lightThemeAction = new QAction(tr("浅色主题"), this);
+    m_darkThemeAction = new QAction(tr("深色主题"), this);
+    m_systemThemeAction = new QAction(tr("跟随系统"), this);
+
+    // 设置动作为可检查
+    m_lightThemeAction->setCheckable(true);
+    m_darkThemeAction->setCheckable(true);
+    m_systemThemeAction->setCheckable(true);
+
+    // 添加动作到菜单
+    m_themeMenu->addAction(m_lightThemeAction);
+    m_themeMenu->addAction(m_darkThemeAction);
+    m_themeMenu->addAction(m_systemThemeAction);
+
+    // 连接动作的信号
+    connect(m_lightThemeAction, &QAction::triggered, this, &MainWindow::setLightTheme);
+    connect(m_darkThemeAction, &QAction::triggered, this, &MainWindow::setDarkTheme);
+    connect(m_systemThemeAction, &QAction::triggered, this, &MainWindow::setSystemTheme);
+
+    // 设置当前主题的选中状态
+    updateThemeActions();
+}
+
+void MainWindow::onThemeChanged(ThemeManager::Theme theme)
+{
+    updateThemeActions();
+}
+
+void MainWindow::setLightTheme()
+{
+    ThemeManager::instance().setTheme(ThemeManager::Theme::Light);
+}
+
+void MainWindow::setDarkTheme()
+{
+    ThemeManager::instance().setTheme(ThemeManager::Theme::Dark);
+}
+
+void MainWindow::setSystemTheme()
+{
+    ThemeManager::instance().setTheme(ThemeManager::Theme::System);
+}
+
+void MainWindow::updateThemeActions()
+{
+    ThemeManager::Theme currentTheme = ThemeManager::instance().currentTheme();
+    m_lightThemeAction->setChecked(currentTheme == ThemeManager::Theme::Light);
+    m_darkThemeAction->setChecked(currentTheme == ThemeManager::Theme::Dark);
+    m_systemThemeAction->setChecked(currentTheme == ThemeManager::Theme::System);
 }

@@ -1,0 +1,4 @@
+/* 系统主题样式文件
+ * 此文件不包含具体样式，而是通过 ThemeManager 类根据系统主题自动选择 light.qss 或 dark.qss
+ * 系统主题的检测逻辑在 ThemeManager::isSystemDarkMode() 中实现
+ */ 

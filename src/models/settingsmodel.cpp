@@ -59,11 +59,39 @@ QString SettingsModel::getSettingsPath() const
     return path + "/settings.json";
 }
 
+void SettingsModel::initializeDefaultModels()
+{
+    // 初始化 API 模型配置
+    QJsonObject apiModels;
+    QJsonObject openai;
+    openai["name"] = "gpt-3.5-turbo";
+    openai["url"] = "https://api.openai.com/v1/chat/completions";
+    openai["enabled"] = true;
+    apiModels["openai"] = openai;
+
+    QJsonObject deepseek;
+    deepseek["name"] = "deepseek-chat";
+    deepseek["url"] = "https://api.deepseek.com/v1/chat/completions";
+    deepseek["enabled"] = true;
+    apiModels["deepseek"] = deepseek;
+
+    m_models["api"] = apiModels;
+
+    // 初始化 Ollama 模型配置
+    QJsonObject ollamaModels;
+    m_models["ollama"] = ollamaModels;
+
+    // 初始化本地模型配置
+    QJsonObject localModels;
+    m_models["local"] = localModels;
+}
+
 void SettingsModel::loadSettings()
 {
     QString settingsPath = getSettingsPath();
     if (settingsPath.isEmpty()) {
         LOG_ERROR("无法获取设置文件路径");
+        setDefaultSettings();
         return;
     }
 
@@ -76,6 +104,7 @@ void SettingsModel::loadSettings()
 
     if (!file.open(QIODevice::ReadOnly)) {
         LOG_ERROR("无法打开配置文件");
+        setDefaultSettings();
         return;
     }
 
@@ -84,41 +113,51 @@ void SettingsModel::loadSettings()
 
     if (!doc.isObject()) {
         LOG_ERROR("配置文件格式无效");
+        setDefaultSettings();
         return;
     }
 
     QJsonObject obj = doc.object();
 
-    // 加载并解密 API 密钥
+    // 加载 API 密钥
     if (obj.contains("apiKey")) {
-        QString encryptedKey = obj["apiKey"].toString();
-        // m_apiKey = Encryption::decrypt(encryptedKey);
-        m_apiKey = encryptedKey;
-        if (m_apiKey.isEmpty()) {
-            LOG_WARNING("API密钥解密失败");
-        }
+        m_apiKey = obj["apiKey"].toString();
     }
 
-    // 加载其他设置
-    m_modelType = static_cast<ModelType>(obj.value("modelType").toInt(0));
-    m_apiUrl = obj.value("apiUrl").toString("https://api.openai.com/v1/chat/completions");
-    m_currentModelName = obj.value("currentModel").toString();
-    m_modelPath = obj.value("modelPath").toString();
+    // 加载应用状态
+    if (obj.contains("appState") && obj["appState"].isObject()) {
+        m_appState = obj["appState"].toObject();
+    } else {
+        m_appState = QJsonObject();
+        m_appState["isFirstRun"] = true;
+    }
 
-    // 发送 API URL 变更信号
-    emit apiUrlChanged();
+    // 加载模型配置
+    if (obj.contains("models") && obj["models"].isObject()) {
+        m_models = obj["models"].toObject();
+    } else {
+        initializeDefaultModels();
+    }
+
+    // 从应用状态中恢复上次的模型选择
+    if (m_appState.contains("lastModelType")) {
+        m_modelType = static_cast<ModelType>(m_appState["lastModelType"].toInt(0));
+    }
+    if (m_appState.contains("lastSelectedModel")) {
+        m_currentModelName = m_appState["lastSelectedModel"].toString();
+    }
 
     // 根据不同的模型类型设置默认值
     switch (m_modelType) {
         case ModelType::API:
             if (m_currentModelName.isEmpty()) {
-                m_currentModelName = obj.value("apiModel").toString("gpt-3.5-turbo");
+                m_currentModelName = "gpt-3.5-turbo";
             }
             break;
 
         case ModelType::Ollama:
             if (m_currentModelName.isEmpty()) {
-                m_currentModelName = obj.value("ollamaModel").toString();
+                m_currentModelName = m_appState["ollamaModel"].toString();
             }
             refreshOllamaModels();
             break;
@@ -148,22 +187,18 @@ void SettingsModel::saveSettings()
 
     QJsonObject obj;
 
-    // 加密并保存 API 密钥
+    // 保存 API 密钥
     if (!m_apiKey.isEmpty()) {
-        // QString encryptedKey = Encryption::encrypt(m_apiKey);
-        QString encryptedKey = m_apiKey;
-        if (!encryptedKey.isEmpty()) {
-            obj["apiKey"] = encryptedKey;
-        } else {
-            LOG_WARNING("API密钥加密失败");
-        }
+        obj["apiKey"] = m_apiKey;
     }
 
-    // 保存其他设置
-    obj["modelType"] = static_cast<int>(m_modelType);
-    obj["currentModel"] = m_currentModelName;
-    obj["apiUrl"] = m_apiUrl;
-    obj["modelPath"] = m_modelPath;
+    // 保存应用状态
+    m_appState["lastModelType"] = static_cast<int>(m_modelType);
+    m_appState["lastSelectedModel"] = m_currentModelName;
+    obj["appState"] = m_appState;
+
+    // 保存模型配置
+    obj["models"] = m_models;
 
     QJsonDocument doc(obj);
 
@@ -184,9 +219,80 @@ void SettingsModel::setDefaultSettings()
 {
     m_modelType = ModelType::API;
     m_apiKey = "";
-    m_apiUrl = "https://api.openai.com/v1/chat/completions";
     m_currentModelName = "gpt-3.5-turbo";
     m_modelPath = "";
+    
+    // 初始化默认模型配置
+    initializeDefaultModels();
+    
+    // 设置首次运行标记
+    m_appState = QJsonObject();
+    m_appState["isFirstRun"] = true;
+}
+
+void SettingsModel::setAppStateValue(const QString& key, const QJsonValue& value)
+{
+    m_appState[key] = value;
+    scheduleSave();
+    emit appStateChanged();
+}
+
+QJsonValue SettingsModel::appStateValue(const QString& key) const
+{
+    return m_appState.value(key);
+}
+
+QJsonObject SettingsModel::getModelConfig(const QString& type, const QString& name) const
+{
+    if (m_models.contains(type) && m_models[type].isObject()) {
+        QJsonObject typeObj = m_models[type].toObject();
+        if (typeObj.contains(name) && typeObj[name].isObject()) {
+            return typeObj[name].toObject();
+        }
+    }
+    return QJsonObject();
+}
+
+void SettingsModel::setModelConfig(const QString& type, const QString& name, const QJsonObject& config)
+{
+    if (!m_models.contains(type)) {
+        m_models[type] = QJsonObject();
+    }
+    QJsonObject typeObj = m_models[type].toObject();
+    typeObj[name] = config;
+    m_models[type] = typeObj;
+    scheduleSave();
+    emit modelConfigChanged();
+}
+
+QStringList SettingsModel::getAvailableModels(const QString& type) const
+{
+    QStringList models;
+    if (m_models.contains(type) && m_models[type].isObject()) {
+        QJsonObject typeObj = m_models[type].toObject();
+        for (auto it = typeObj.begin(); it != typeObj.end(); ++it) {
+            if (it.value().isObject()) {
+                QJsonObject modelObj = it.value().toObject();
+                if (modelObj["enabled"].toBool(true)) {
+                    models.append(it.key());
+                }
+            }
+        }
+    }
+    return models;
+}
+
+bool SettingsModel::isModelEnabled(const QString& type, const QString& name) const
+{
+    QJsonObject config = getModelConfig(type, name);
+    return config["enabled"].toBool(true);
+}
+
+void SettingsModel::setModelEnabled(const QString& type, const QString& name, bool enabled)
+{
+    QJsonObject config = getModelConfig(type, name);
+    config["enabled"] = enabled;
+    setModelConfig(type, name, config);
 }
 
 void SettingsModel::scheduleSave()

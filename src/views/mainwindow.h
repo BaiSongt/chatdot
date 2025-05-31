@@ -78,6 +78,7 @@ private:
     QComboBox* m_modelSelector;
     QLabel* m_statusLabel;
     bool m_isGenerating;
+    bool m_isUpdating;  // 用于防止模型选择器的递归更新
 
     // Menu Items
     QAction* m_settingsAction;

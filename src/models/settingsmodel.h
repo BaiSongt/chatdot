@@ -11,7 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTimer>
-#include "utils/encryption.h"
+// #include "utils/encryption.h"
 
 class SettingsModel : public QObject
 {
@@ -33,6 +33,9 @@ public:
 
     static SettingsModel& instance();
 
+    explicit SettingsModel(QObject *parent = nullptr);
+    ~SettingsModel();
+
     QString apiKey() const { return m_apiKey; }
     QString modelPath() const { return m_modelPath; }
     QString apiUrl() const { return m_apiUrl; }
@@ -48,10 +51,22 @@ public:
     void setOllamaModels(const QStringList &models);
     void refreshOllamaModels();
 
-    // 配置文件操作
     void loadSettings();
     void saveSettings();
     QString getSettingsPath() const;
+
+    void setDefaultSettings();
+    void scheduleSave();
+
+    void setAppStateValue(const QString& key, const QJsonValue& value);
+    QJsonValue appStateValue(const QString& key) const;
+    QJsonObject appState() const { return m_appState; }
+
+    QJsonObject getModelConfig(const QString& type, const QString& name) const;
+    void setModelConfig(const QString& type, const QString& name, const QJsonObject& config);
+    QStringList getAvailableModels(const QString& type) const;
+    bool isModelEnabled(const QString& type, const QString& name) const;
+    void setModelEnabled(const QString& type, const QString& name, bool enabled);
 
 signals:
     void apiKeyChanged();
@@ -60,15 +75,12 @@ signals:
     void apiUrlChanged();
     void currentModelNameChanged(const QString& modelName);
     void ollamaModelsChanged();
+    void appStateChanged();
+    void modelConfigChanged();
 
 private:
-    explicit SettingsModel(QObject *parent = nullptr);
-    ~SettingsModel();
     SettingsModel(const SettingsModel&) = delete;
     SettingsModel& operator=(const SettingsModel&) = delete;
-
-    void setDefaultSettings();
-    void scheduleSave();
 
     QString m_apiKey;
     QString m_modelPath;
@@ -77,6 +89,10 @@ private:
     QString m_currentModelName;
     QStringList m_ollamaModels;
     QTimer* m_saveTimer;
+    QJsonObject m_appState;
+    QJsonObject m_models;
+
+    void initializeDefaultModels();
 };
 
 #endif // SETTINGSMODEL_H

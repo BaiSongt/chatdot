@@ -23,15 +23,9 @@ find_package(Qt6 REQUIRED COMPONENTS
     Concurrent
 )
 
-# 添加OpenSSL调试信息
 # 设置 OpenSSL 查找路径
 set(OPENSSL_ROOT_DIR "D:/vcpkg/installed/x64-windows")
-
-message(STATUS "Looking for OpenSSL...")
 find_package(OpenSSL REQUIRED)
-message(STATUS "OpenSSL_FOUND: ${OPENSSLL_FOUND}")
-message(STATUS "OpenSSL_INCLUDE_DIR: ${OPENSSL_INCLUDE_DIR}")
-message(STATUS "OpenSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
 
 set(PROJECT_SOURCES
     src/main.cpp
@@ -59,7 +53,7 @@ set(PROJECT_SOURCES
     src/services/localmodelservice.h
     src/services/logger.cpp
     src/services/logger.h
-    src/utils/encryption.h
+    # src/utils/encryption.h
 )
 
 add_executable(${PROJECT_NAME}
@@ -72,8 +66,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Widgets
     Qt6::Network
     Qt6::Concurrent
-    OpenSSL::SSL
-    OpenSSL::Crypto
+    # OpenSSL::SSL
+    # OpenSSL::Crypto
 )
 
 # 设置包含目录
@@ -96,29 +90,17 @@ install(TARGETS ${PROJECT_NAME}
 add_executable(test_app src/test.cpp)
 target_link_libraries(test_app PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 
-# 设置输出目录
+# 设置测试程序输出目录
 set_target_properties(test_app PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-# 复制 Qt DLL
+# 复制 OpenSSL DLL
 if(WIN32)
-    add_custom_command(TARGET chatdot POST_BUILD
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:Qt6::Core>
-            $<TARGET_FILE:Qt6::Gui>
-            $<TARGET_FILE:Qt6::Widgets>
-            $<TARGET_FILE:Qt6::Network>
-            $<TARGET_FILE:Qt6::Concurrent>
-            $<TARGET_FILE_DIR:chatdot>
-    )
-
-    # 复制 Qt 平台插件
-    add_custom_command(TARGET chatdot POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:chatdot>/platforms
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>
-            $<TARGET_FILE_DIR:chatdot>/platforms
+            $<TARGET_FILE:OpenSSL::SSL>
+            $<TARGET_FILE:OpenSSL::Crypto>
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>
     )
 endif()

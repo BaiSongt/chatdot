@@ -102,13 +102,28 @@ void ChatViewModel::handleError(const QString& error)
 
 void ChatViewModel::setLLMService(LLMService* service)
 {
+    // 如果当前有服务，先清理它
     if (m_llmService) {
+        // 断开所有信号连接
+        disconnect(m_llmService, nullptr, this, nullptr);
+        // 删除旧服务
         delete m_llmService;
+        m_llmService = nullptr;
     }
+
+    // 设置新服务
     m_llmService = service;
     if (!m_llmService) {
-        emit errorOccurred("无法创建AI模型服务");
+        emit errorOccurred("未选择AI模型");
+        return;
     }
+
+    // 连接新服务的信号
+    connect(m_llmService, &LLMService::streamResponseReceived,
+            this, &ChatViewModel::handleStreamResponse,
+            Qt::UniqueConnection);
+
+    LOG_INFO(QString("已切换到模型: %1").arg(m_llmService->getModelName()));
 }
 
 void ChatViewModel::clearChat()

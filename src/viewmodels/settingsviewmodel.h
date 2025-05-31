@@ -5,7 +5,7 @@
 #include <QString>
 #include "models/settingsmodel.h"
 #include "services/llmservice.h"
-#include "utils/encryption.h"
+// #include "utils/encryption.h"
 
 class SettingsViewModel : public QObject
 {

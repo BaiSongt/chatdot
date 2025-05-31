@@ -30,6 +30,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_modelSelector(nullptr)
     , m_statusLabel(nullptr)
     , m_isGenerating(false)
+    , m_isUpdating(false)
     , m_settingsAction(nullptr)
     , m_saveChatAction(nullptr)
     , m_loadChatAction(nullptr)
@@ -324,33 +325,53 @@ void MainWindow::updateModelList()
     QString currentModel = m_modelSelector->currentText();
     m_modelSelector->clear();
 
-    // API 模型分类
-    m_modelSelector->addItem(tr("--- OpenAI 模型 ---"), "");
-    m_modelSelector->addItem("GPT-4 Turbo", "gpt-4-1106-preview");
-    m_modelSelector->addItem("GPT-4", "gpt-4");
-    m_modelSelector->addItem("GPT-3.5 Turbo 16K", "gpt-3.5-turbo-16k");
-    m_modelSelector->addItem("GPT-3.5 Turbo", "gpt-3.5-turbo");
-
-    // Deepseek 模型
-    m_modelSelector->addItem(tr("--- Deepseek 模型 ---"), "");
-    m_modelSelector->addItem("DeepSeek Chat", "deepseek-chat");
-    m_modelSelector->addItem("DeepSeek Coder", "deepseek-coder");
-
-    // Ollama 模型
-    if (m_settingsModel->modelType() == SettingsModel::ModelType::Ollama) {
-        QStringList ollamaModels = m_settingsModel->ollamaModels();
-        if (!ollamaModels.isEmpty()) {
-            m_modelSelector->addItem(tr("--- Ollama 模型 ---"), "");
-            for (const QString& model : ollamaModels) {
-                m_modelSelector->addItem(QString("Ollama: %1").arg(model), model);
+    // 根据当前设置的类型显示对应的模型
+    switch (m_settingsModel->modelType()) {
+        case SettingsModel::ModelType::API: {
+            // API 模型分类
+            m_modelSelector->addItem(tr("--- OpenAI 模型 ---"), "");
+            QStringList apiModels = m_settingsModel->getAvailableModels("api");
+            for (const QString& modelName : apiModels) {
+                QJsonObject config = m_settingsModel->getModelConfig("api", modelName);
+                if (config["enabled"].toBool(true)) {
+                    m_modelSelector->addItem(config["name"].toString(), modelName);
+                }
             }
+            break;
         }
-    }
-
-    // 本地模型
-    if (!m_settingsModel->modelPath().isEmpty()) {
-        m_modelSelector->addItem(tr("--- 本地模型 ---"), "");
-        m_modelSelector->addItem(QString("本地: %1").arg(QFileInfo(m_settingsModel->modelPath()).fileName()));
+        case SettingsModel::ModelType::Ollama: {
+            QStringList ollamaModels = m_settingsModel->ollamaModels();
+            if (!ollamaModels.isEmpty()) {
+                m_modelSelector->addItem(tr("--- Ollama 模型 ---"), "");
+                for (const QString& model : ollamaModels) {
+                    QJsonObject config = m_settingsModel->getModelConfig("ollama", model);
+                    if (config["enabled"].toBool(true)) {
+                        m_modelSelector->addItem(QString("Ollama: %1").arg(model), model);
+                    }
+                }
+            } else {
+                m_modelSelector->addItem(tr("无可用模型"), "");
+            }
+            break;
+        }
+        case SettingsModel::ModelType::Local: {
+            QStringList localModels = m_settingsModel->getAvailableModels("local");
+            if (!localModels.isEmpty()) {
+                m_modelSelector->addItem(tr("--- 本地模型 ---"), "");
+                for (const QString& model : localModels) {
+                    QJsonObject config = m_settingsModel->getModelConfig("local", model);
+                    if (config["enabled"].toBool(true)) {
+                        m_modelSelector->addItem(QString("本地: %1").arg(config["name"].toString()), model);
+                    }
+                }
+            } else {
+                m_modelSelector->addItem(tr("无可用模型"), "");
+            }
+            break;
+        }
+        default:
+            m_modelSelector->addItem(tr("无可用模型"), "");
+            break;
     }
 
     // 恢复之前选择的模型
@@ -370,7 +391,9 @@ void MainWindow::updateModelList()
                 }
             }
         }
-    }    // 阻止信号触发，避免在恢复选择时触发onModelSelectionChanged
+    }
+
+    // 阻止信号触发，避免在恢复选择时触发onModelSelectionChanged
     m_modelSelector->blockSignals(true);
 
     // 如果找到了匹配的选项，设置为当前选择
@@ -396,59 +419,29 @@ void MainWindow::updateModelList()
 
 void MainWindow::onModelSelectionChanged(int index)
 {
-    // 如果正在更新列表，忽略选择变化
-    static bool isUpdating = false;
-    if (isUpdating) {
+    if (index < 0 || m_isUpdating) {
         return;
     }
 
-    // 获取选择的模型数据
-    QString modelName = m_modelSelector->currentData().toString();
     QString displayName = m_modelSelector->currentText();
+    QString modelName = m_modelSelector->currentData().toString();
 
-    // 如果是分类标题（data为空），或者是分隔符，忽略此次选择
-    if (modelName.isEmpty() || displayName.startsWith("---")) {
-        LOG_INFO("忽略分类标题选择");
-
-        // 标记开始更新
-        isUpdating = true;
-        // 恢复到之前的有效选择
-        QString lastValidModel = m_settingsModel->currentModelName();
-        int validIndex = -1;
-
-        // 首先尝试通过modelName匹配
-        if (!lastValidModel.isEmpty()) {
-            validIndex = m_modelSelector->findData(lastValidModel);
+    // 如果选择了"无可用模型"，直接返回
+    if (displayName == tr("无可用模型") || modelName.isEmpty()) {
+        if (m_chatViewModel) {
+            m_chatViewModel->setLLMService(nullptr);
         }
-
-        // 如果没找到，尝试找到第一个有效的模型
-        if (validIndex < 0) {
-            for (int i = 0; i < m_modelSelector->count(); i++) {
-                QString itemData = m_modelSelector->itemData(i).toString();
-                QString itemText = m_modelSelector->itemText(i);
-                if (!itemData.isEmpty() && !itemText.startsWith("---")) {
-                    validIndex = i;
-                    break;
-                }
-            }
-        }
-
-        // 如果找到了有效索引，设置它
-        if (validIndex >= 0) {
-            m_modelSelector->setCurrentIndex(validIndex);
-        }
-
-        // 标记更新结束
-        isUpdating = false;
         return;
     }
 
-    // 如果是有效选择，使用modelName
-    if (modelName.isEmpty()) {
-        modelName = displayName;
+    LOG_INFO(QString("选择模型: %1 (显示名称: %2)").arg(modelName).arg(displayName));
+
+    // 先清理当前的服务
+    if (m_chatViewModel) {
+        m_chatViewModel->setLLMService(nullptr);
     }
 
-    // 判断模型类型并设置
+    // 根据显示名称判断模型类型
     if (displayName.startsWith("Ollama:")) {
         m_settingsModel->setModelType(SettingsModel::ModelType::Ollama);
         // 移除 "Ollama: " 前缀
@@ -470,9 +463,9 @@ void MainWindow::onModelSelectionChanged(int index)
     if (!service) {
         showError(tr("错误"), tr("无法初始化选中的模型，请检查设置"));
         // 恢复到之前的选择
-        isUpdating = true;
+        m_isUpdating = true;
         refreshModelList();
-        isUpdating = false;
+        m_isUpdating = false;
         return;
     }
 

@@ -583,6 +583,7 @@ void MainWindow::onModelSelectionChanged(int index)
 
     // 如果选择了"无可用模型"，直接返回
     if (displayName == tr("无可用模型") || modelName.isEmpty()) {
+        LOG_WARNING("未选择有效的模型");
         if (m_chatViewModel) {
             m_chatViewModel->setLLMService(nullptr);
         }
@@ -597,29 +598,47 @@ void MainWindow::onModelSelectionChanged(int index)
     }
 
     // 根据显示名称判断模型类型
+    SettingsModel::ModelType modelType;
     if (displayName.startsWith("Ollama:")) {
-        m_settingsModel->setModelType(SettingsModel::ModelType::Ollama);
+        modelType = SettingsModel::ModelType::Ollama;
         // 移除 "Ollama: " 前缀
         modelName = displayName.mid(8).trimmed();
     } else if (displayName.startsWith("本地:")) {
-        m_settingsModel->setModelType(SettingsModel::ModelType::Local);
+        modelType = SettingsModel::ModelType::Local;
         // 移除 "本地: " 前缀
         modelName = displayName.mid(4).trimmed();
     } else {
-        m_settingsModel->setModelType(SettingsModel::ModelType::API);
+        modelType = SettingsModel::ModelType::API;
+    }
+
+    // 检查模型配置是否完整
+    if (!m_settingsModel->isModelConfigComplete(m_settingsModel->getModelTypeString(modelType), modelName)) {
+        QStringList missingItems = m_settingsModel->getMissingConfigItems(
+            m_settingsModel->getModelTypeString(modelType), modelName);
+        QString errorMsg = tr("模型配置不完整，缺少: %1").arg(missingItems.join(", "));
+        LOG_ERROR(errorMsg);
+        showError(tr("配置错误"), errorMsg);
+        // 恢复到之前的选择
+        m_isUpdating = true;
+        updateModelList();
+        m_isUpdating = false;
+        return;
     }
 
     // 更新当前模型
+    m_settingsModel->setModelType(modelType);
     m_settingsModel->setCurrentModelName(modelName);
-    LOG_INFO(QString("切换到模型: %1 (类型: %2)").arg(modelName).arg(static_cast<int>(m_settingsModel->modelType())));
+    LOG_INFO(QString("切换到模型: %1 (类型: %2)").arg(modelName).arg(static_cast<int>(modelType)));
 
     // 创建新的LLMService
     LLMService* service = m_settingsViewModel->createLLMService();
     if (!service) {
-        LOG_ERROR(QString("创建模型服务失败: %1").arg(modelName));
+        QString errorMsg = tr("创建模型服务失败: %1").arg(modelName);
+        LOG_ERROR(errorMsg);
+        showError(tr("服务错误"), errorMsg);
         // 恢复到之前的选择
         m_isUpdating = true;
-        updateModelList();  // 只更新列表，不刷新服务
+        updateModelList();
         m_isUpdating = false;
         return;
     }

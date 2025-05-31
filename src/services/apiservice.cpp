@@ -150,12 +150,13 @@ void APIService::handleResponse(QNetworkReply* reply)
             m_currentFuture.reportFinished(&response);
         } else {
             QString error = tr("API响应格式错误");
-            m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error(error.toStdString())));
+            LOG_ERROR(error);
+            m_currentFuture.reportFinished(&error);
         }
     } else {
-        QString error = reply->errorString();
-        LOG_ERROR(QString("API请求失败: %1").arg(error));
-        m_currentFuture.reportException(std::make_exception_ptr(std::runtime_error(error.toStdString())));
+        QString error = QString("API请求失败: %1").arg(reply->errorString());
+        LOG_ERROR(error);
+        m_currentFuture.reportFinished(&error);
     }
 }
 

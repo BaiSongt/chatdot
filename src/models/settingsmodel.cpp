@@ -599,6 +599,35 @@ QString SettingsModel::getCurrentApiUrl() const
     return QString();
 }
 
+QString SettingsModel::getModelTypeString() const
+{
+    return getModelTypeString(m_modelType);
+}
+
+QString SettingsModel::getModelTypeString(ModelType type) const
+{
+    switch (type) {
+        case ModelType::API:
+            return "api";
+        case ModelType::Ollama:
+            return "ollama";
+        case ModelType::Local:
+            return "local";
+        default:
+            LOG_WARNING("未知的模型类型");
+            return "api";
+    }
+}
+
+void SettingsModel::setDeepThinkingMode(bool enabled)
+{
+    if (m_isDeepThinking != enabled) {
+        m_isDeepThinking = enabled;
+        LOG_INFO(QString("深度思考模式: %1").arg(enabled ? "开启" : "关闭"));
+        scheduleSave();
+    }
+}
+
 bool SettingsModel::loadConfigFile(QJsonObject& root)
 {
     QString settingsPath = getSettingsPath();

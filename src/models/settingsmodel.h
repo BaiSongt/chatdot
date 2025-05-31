@@ -144,6 +144,14 @@ public:
     // 获取当前模型的 URL
     QString getCurrentApiUrl() const;
 
+    // 获取模型类型字符串
+    QString getModelTypeString() const;
+    QString getModelTypeString(ModelType type) const;
+
+    // 深度思考模式
+    bool isDeepThinkingMode() const { return m_isDeepThinking; }
+    void setDeepThinkingMode(bool enabled);
+
     // 检查模型配置是否完整
     bool isModelConfigComplete(const QString& type, const QString& modelName) const;
     
@@ -196,6 +204,7 @@ private:
     QJsonObject m_models_config;
     QJsonObject m_configuredModels;
     QString m_currentProvider;
+    bool m_isDeepThinking = false;  // 添加深度思考模式标志
 
     double m_temperature;
     int m_maxTokens;

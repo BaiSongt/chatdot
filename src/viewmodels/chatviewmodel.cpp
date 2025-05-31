@@ -24,17 +24,29 @@ ChatViewModel::~ChatViewModel()
 void ChatViewModel::sendMessage(const QString& message)
 {
     if (message.isEmpty()) {
+        LOG_WARNING("尝试发送空消息");
         return;
     }
 
     // 检查是否选择了AI模型
     if (!m_llmService) {
-        emit errorOccurred(tr("未选择AI模型，请先在设置中选择一个模型"));
+        QString errorMsg = tr("未选择AI模型，请先在设置中选择一个模型");
+        LOG_ERROR(errorMsg);
+        emit errorOccurred(errorMsg);
+        return;
+    }
+
+    // 检查服务是否可用
+    if (!m_llmService->isAvailable()) {
+        QString errorMsg = tr("当前选择的模型服务不可用，请检查配置");
+        LOG_ERROR(errorMsg);
+        emit errorOccurred(errorMsg);
         return;
     }
 
     // 添加用户消息到聊天记录
     m_model->addMessage("user", message);
+    LOG_INFO(QString("发送用户消息: %1").arg(message));
 
     // 开始生成回复
     emit generationStarted();
@@ -44,18 +56,22 @@ void ChatViewModel::sendMessage(const QString& message)
 
     // 发送消息到AI服务
     QFuture<QString> future = m_llmService->generateResponse(message);
+    LOG_INFO("已发送消息到AI服务，等待响应...");
 
     // 使用QFuture的异步回调处理响应和错误
     future.then([this](const QString& response) {
         if (!m_isCancelled) {
             LOG_INFO(QString("收到完整响应: %1字符").arg(response.length()));
             handleResponse(response);
+        } else {
+            LOG_INFO("生成已被取消");
         }
         m_isGenerating = false;
         emit generationFinished();
     }).onFailed([this](const std::exception& e) {
-        LOG_ERROR(QString("处理消息时发生错误: %1").arg(e.what()));
-        handleError(QString::fromStdString(e.what()));
+        QString errorMsg = QString("处理消息时发生错误: %1").arg(e.what());
+        LOG_ERROR(errorMsg);
+        handleError(errorMsg);
         m_isGenerating = false;
         emit generationFinished();
     });

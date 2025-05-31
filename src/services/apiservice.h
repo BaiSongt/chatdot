@@ -30,6 +30,7 @@ private:
     QString m_apiUrl;
     QString m_provider;
     QString m_currentModelName;
+    QString m_currentResponse;  // 用于累积流式响应
     QNetworkAccessManager* m_networkManager;
     QFutureInterface<QString> m_currentFuture;
 };

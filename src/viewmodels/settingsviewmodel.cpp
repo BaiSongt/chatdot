@@ -60,8 +60,13 @@ LLMService* SettingsViewModel::createLLMService()
     try {
         switch (m_model->modelType()) {
             case SettingsModel::ModelType::API: {
-                QString apiKey = m_model->apiKey();
-                QString apiUrl = m_model->apiUrl();
+                QString provider = m_model->getProviderForModel(modelName);
+                if (provider.isEmpty()) {
+                    LOG_ERROR("未找到模型对应的提供商");
+                    return nullptr;
+                }
+                QString apiKey = m_model->getProviderApiKey("api", provider);
+                QString apiUrl = m_model->getModelConfig("api", modelName)["url"].toString();
                 if (apiKey.isEmpty() || apiUrl.isEmpty()) {
                     LOG_ERROR("API配置不完整");
                     return nullptr;

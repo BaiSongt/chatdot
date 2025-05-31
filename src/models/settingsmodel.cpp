@@ -364,7 +364,7 @@ bool SettingsModel::isModelConfigComplete(const QString& type, const QString& mo
         if (provider.isEmpty()) {
             return false;
         }
-        QJsonObject providerConfig = m_models_config["api"].toObject()[provider].toObject();
+        QJsonObject providerConfig = getProviderConfig("api", provider);
         if (!isProviderConfigComplete(provider, providerConfig)) {
             return false;
         }
@@ -417,7 +417,7 @@ QStringList SettingsModel::getMissingConfigItems(const QString& type, const QStr
         if (provider.isEmpty()) {
             missingItems << "provider";
         } else {
-            QJsonObject providerConfig = m_models_config["api"].toObject()[provider].toObject();
+            QJsonObject providerConfig = getProviderConfig("api", provider);
             missingItems << getMissingProviderConfigItems(provider, providerConfig);
         }
     }

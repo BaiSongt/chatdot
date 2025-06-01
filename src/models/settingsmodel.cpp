@@ -1276,9 +1276,17 @@ void SettingsModel::refreshOllamaModels()
 
 void SettingsModel::setOllamaModels(const QStringList &models)
 {
-    if (m_ollamaModels != models) {
-        m_ollamaModels = models;
-        LOG_INFO("Ollama模型列表已更新");
-        emit ollamaModelsChanged();
+    m_ollamaModels = models;
+    emit ollamaModelsChanged();
+    scheduleSave();
+}
+
+void SettingsModel::setOllamaUrl(const QString &url)
+{
+    if (m_ollamaUrl != url) {
+        m_ollamaUrl = url;
+        // 将URL保存到应用状态
+        setAppStateValue("ollamaUrl", url);
+        scheduleSave();
     }
 }

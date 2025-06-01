@@ -763,7 +763,7 @@ void MainWindow::onClearChat()
 void MainWindow::onOpenSettings()
 {
     // 创建并显示设置对话框
-    SettingsDialog dialog(m_settingsModel, this);
+    SettingsDialog dialog(m_settingsViewModel, this);
     if (dialog.exec() == QDialog::Accepted) {
         LOG_INFO("设置对话框已确认，开始更新设置");
         

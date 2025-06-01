@@ -2,6 +2,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSettings>
+#include <QTimer>
 #include "services/logger.h"
 
 SettingsDialog::SettingsDialog(SettingsModel* model, QWidget *parent)
@@ -207,7 +208,15 @@ void SettingsDialog::refreshOllamaModels()
     LOG_INFO("开始刷新Ollama模型列表");
     m_refreshOllamaModelsBtn->setEnabled(false);
     m_refreshOllamaModelsBtn->setText(tr("正在刷新..."));
+    
+    // 调用模型刷新函数
     m_model->refreshOllamaModels();
+    
+    // 添加一个延时器，确保在刷新完成后更新UI
+    QTimer::singleShot(1000, this, [this]() {
+        // 在延时后强制更新模型列表
+        updateOllamaModelList();
+    });
 }
 
 void SettingsDialog::updateOllamaModelList()
@@ -242,8 +251,8 @@ void SettingsDialog::updateOllamaModelList()
     m_refreshOllamaModelsBtn->setEnabled(true);
     m_refreshOllamaModelsBtn->setText(tr("刷新"));
     
-    // 发出模型列表更新信号
-    emit m_model->ollamaModelsChanged();
+    // 移除这行以避免循环调用
+    // emit m_model->ollamaModelsChanged();
 }
 
 void SettingsDialog::loadSettings()
@@ -268,7 +277,17 @@ void SettingsDialog::loadSettings()
         m_apiUrlInput->setText(apiUrl);
     }
 
-    m_apiKeyInput->setText(settings.value("apiKey").toString());
+    // 获取当前选择的提供商
+    QString provider = m_apiProviderSelector->currentText();
+    
+    // 从SettingsModel获取当前提供商的API Key，而不是从全局设置中获取
+    if (m_model) {
+        QString apiKey = m_model->getProviderApiKey("api", provider);
+        m_apiKeyInput->setText(apiKey);
+    } else {
+        m_apiKeyInput->setText("");
+    }
+    
     m_apiModelSelector->setCurrentText(settings.value("apiModel", "gpt-3.5-turbo").toString());
 
     // 加载Ollama设置
@@ -387,6 +406,12 @@ void SettingsDialog::onApiProviderChanged(int index)
     // 如果不是自定义,设置默认API地址
     if (!isCustom) {
         m_apiUrlInput->setText(apiUrl);
+    }
+    
+    // 从SettingsModel获取当前提供商的API Key
+    if (m_model) {
+        QString apiKey = m_model->getProviderApiKey("api", provider);
+        m_apiKeyInput->setText(apiKey);
     }
 
     LOG_INFO(QString("切换API提供商到: %1").arg(provider));

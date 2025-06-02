@@ -120,6 +120,9 @@ public:
     // 获取提供商配置
     QJsonObject getProviderConfig(const QString& type, const QString& provider) const;
     
+    // 设置提供商配置
+    void setProviderConfig(const QString& type, const QString& provider, const QJsonObject& config);
+    
     // 获取提供商的 API Key
     QString getProviderApiKey(const QString& type, const QString& provider) const;
     
@@ -137,6 +140,9 @@ public:
 
     // 获取当前模型的提供商
     QString getCurrentProvider() const;
+    
+    // 获取所有已配置的API提供商列表
+    QStringList getConfiguredProviders() const;
 
     // 获取当前模型的 API Key
     QString getCurrentApiKey() const;

@@ -66,7 +66,8 @@ private:
     void updateSendButton(bool isGenerating);
 
     // 模型列表更新相关方法
-    void updateApiModels(const QStringList& availableModels);
+    void updateApiModelsForProvider(const QString& provider, const QStringList& availableModels);
+    void updateApiModels(const QStringList& availableModels); // 保留为兼容性考虑
     void updateOllamaModels(const QStringList& availableModels);
     void updateLocalModels(const QStringList& availableModels);
     void addModelToSelector(const QString& displayName, const QString& modelName, bool isComplete, const QStringList& missingItems = QStringList());

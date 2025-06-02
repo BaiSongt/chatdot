@@ -32,6 +32,7 @@ private slots:
     void onBrowseLocalModelClicked();
     void updateOllamaModelList();
     void updateApiModelList(const QString& provider);
+    void onErrorOccurred(const QString& error);
 
 private:
     void setupUI();
@@ -51,6 +52,7 @@ private:
     QWidget* m_apiUrlWidget;
     QLineEdit* m_apiUrlInput;
     QComboBox* m_apiModelSelector;
+    QPushButton* m_fetchApiModelsBtn;
 
     // Ollama设置
     QWidget* m_ollamaSettingsWidget;

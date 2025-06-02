@@ -6,6 +6,11 @@
 #include <QDebug>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QUrl>
 
 SettingsViewModel::SettingsViewModel(SettingsModel* model, QObject *parent)
     : QObject(parent)
@@ -119,11 +124,154 @@ void SettingsViewModel::loadSettings()
 
 void SettingsViewModel::refreshOllamaModels()
 {
+    if (m_isRefreshingModels) {
+        return;
+    }
+    
+    m_isRefreshingModels = true;
+    emit refreshStateChanged(true);
+    m_model->refreshOllamaModels();
+}
+
+void SettingsViewModel::fetchApiModelsFromProvider(const QString& provider)
+{
+    if (m_isRefreshingModels) {
+        return;
+    }
+    
+    // 获取API密钥
+    QString apiKey = getProviderApiKey(provider);
+    if (apiKey.isEmpty()) {
+        emit errorOccurred(tr("API密钥未设置，请先设置API密钥"));
+        return;
+    }
+    
+    // 获取API URL
+    QString baseUrl;
+    if (provider == "OpenAI") {
+        baseUrl = "https://api.openai.com/v1/models";
+    } else if (provider == "Deepseek") {
+        baseUrl = "https://api.deepseek.com/v1/models";
+    } else {
+        // 对于自定义提供商，使用默认URL的基础部分
+        QJsonObject providerConfig = m_model->getProviderConfig("api", provider);
+        if (providerConfig.contains("default_url")) {
+            QString defaultUrl = providerConfig["default_url"].toString();
+            // 从完整URL中提取基础URL
+            QUrl url(defaultUrl);
+            baseUrl = url.scheme() + "://" + url.host();
+            if (url.port() != -1) {
+                baseUrl += ":" + QString::number(url.port());
+            }
+            baseUrl += "/v1/models"; // 假设大多数API都遵循这种模式
+        } else {
+            emit errorOccurred(tr("无法确定API URL，请检查提供商配置"));
+            return;
+        }
+    }
+    
+    LOG_INFO(QString("正在从提供商 %1 获取模型列表，URL: %2").arg(provider).arg(baseUrl));
+    
+    // 设置刷新状态
     m_isRefreshingModels = true;
     emit refreshStateChanged(true);
     
-    LOG_INFO("开始刷新Ollama模型列表");
-    m_model->refreshOllamaModels();
+    // 创建网络请求
+    QNetworkAccessManager* manager = new QNetworkAccessManager(this);
+    QUrl url(baseUrl);
+    QNetworkRequest request;
+    request.setUrl(url);
+    
+    // 设置请求头
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Authorization", QString("Bearer %1").arg(apiKey).toUtf8());
+    
+    // 发送GET请求
+    QNetworkReply* reply = manager->get(request);
+    
+    // 处理请求完成信号
+    connect(reply, &QNetworkReply::finished, this, [this, reply, provider, manager]() {
+        m_isRefreshingModels = false;
+        emit refreshStateChanged(false);
+        
+        if (reply->error() != QNetworkReply::NoError) {
+            LOG_ERROR(QString("获取模型列表失败: %1").arg(reply->errorString()));
+            emit errorOccurred(tr("获取模型列表失败: %1").arg(reply->errorString()));
+            reply->deleteLater();
+            manager->deleteLater();
+            return;
+        }
+        
+        // 解析响应数据
+        QByteArray responseData = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(responseData);
+        
+        if (doc.isNull() || !doc.isObject()) {
+            LOG_ERROR("解析模型列表响应失败: 无效的JSON数据");
+            emit errorOccurred(tr("解析模型列表响应失败: 无效的JSON数据"));
+            reply->deleteLater();
+            manager->deleteLater();
+            return;
+        }
+        
+        QJsonObject root = doc.object();
+        QStringList modelNames;
+        
+        // 解析模型列表
+        if (root.contains("data") && root["data"].isArray()) {
+            QJsonArray models = root["data"].toArray();
+            
+            for (const QJsonValue& model : models) {
+                if (model.isObject() && model.toObject().contains("id")) {
+                    QString modelId = model.toObject()["id"].toString();
+                    modelNames.append(modelId);
+                    LOG_INFO(QString("发现模型: %1").arg(modelId));
+                }
+            }
+            
+            LOG_INFO(QString("从提供商 %1 获取到 %2 个模型").arg(provider).arg(modelNames.size()));
+            
+            // 更新模型配置
+            QJsonObject providerConfig = m_model->getProviderConfig("api", provider);
+            QJsonObject modelsConfig;
+            
+            // 保留现有的模型配置
+            if (providerConfig.contains("models")) {
+                modelsConfig = providerConfig["models"].toObject();
+            }
+            
+            // 添加新的模型
+            for (const QString& modelId : modelNames) {
+                if (!modelsConfig.contains(modelId)) {
+                    QJsonObject modelConfig;
+                    modelConfig["name"] = modelId;
+                    modelConfig["enabled"] = true;
+                    
+                    // 使用提供商的默认URL
+                    if (providerConfig.contains("default_url")) {
+                        modelConfig["url"] = providerConfig["default_url"].toString();
+                    }
+                    
+                    modelsConfig[modelId] = modelConfig;
+                }
+            }
+            
+            // 更新提供商配置
+            providerConfig["models"] = modelsConfig;
+            
+            // 保存到设置模型
+            m_model->setProviderConfig("api", provider, providerConfig);
+            
+            // 通知模型列表已更新
+            emit apiModelsChanged();
+        } else {
+            LOG_ERROR("解析模型列表响应失败: 未找到模型数据");
+            emit errorOccurred(tr("解析模型列表响应失败: 未找到模型数据"));
+        }
+        
+        reply->deleteLater();
+        manager->deleteLater();
+    });
 }
 
 QStringList SettingsViewModel::getApiModelsForProvider(const QString& provider)

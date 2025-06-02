@@ -1,10 +1,10 @@
 #include "settingsdialog.h"
+#include "services/logger.h"
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QSettings>
 #include <QTimer>
 #include <QFormLayout>
-#include "services/logger.h"
 
 SettingsDialog::SettingsDialog(SettingsViewModel* viewModel, QWidget *parent)
     : QDialog(parent)
@@ -70,9 +70,13 @@ void SettingsDialog::setupUI()
     m_apiKeyInput->setEchoMode(QLineEdit::Password); // 密码模式显示
     apiFormLayout->addRow(tr("API Key:"), m_apiKeyInput);
 
-    // API模型选择
+    // API模型选择和获取按钮
+    QHBoxLayout* apiModelLayout = new QHBoxLayout();
     m_apiModelSelector = new QComboBox();
-    apiFormLayout->addRow(tr("API模型:"), m_apiModelSelector);
+    apiModelLayout->addWidget(m_apiModelSelector);
+    m_fetchApiModelsBtn = new QPushButton(tr("获取模型列表"));
+    apiModelLayout->addWidget(m_fetchApiModelsBtn);
+    apiFormLayout->addRow(tr("API模型:"), apiModelLayout);
     
     apiLayout->addLayout(apiFormLayout);
     m_modelSettingsStack->addWidget(m_apiSettingsWidget);
@@ -189,11 +193,21 @@ void SettingsDialog::setupConnections()
     connect(m_refreshOllamaModelsBtn, &QPushButton::clicked, 
             m_viewModel, &SettingsViewModel::refreshOllamaModels);
     
+    connect(m_fetchApiModelsBtn, &QPushButton::clicked, this, [this]() {
+        QString provider = m_apiProviderSelector->currentText();
+        if (!provider.isEmpty()) {
+            m_viewModel->fetchApiModelsFromProvider(provider);
+        }
+    });
+    
     connect(m_localModelPathInput, &QLineEdit::textChanged, 
             m_viewModel, &SettingsViewModel::setLocalModelPath);
     
     connect(m_browseLocalModelBtn, &QPushButton::clicked, 
             this, &SettingsDialog::onBrowseLocalModelClicked);
+    
+    // 错误处理连接
+    connect(m_viewModel, &SettingsViewModel::errorOccurred, this, &SettingsDialog::onErrorOccurred);
     
     // 按钮连接
     connect(m_saveButton, &QPushButton::clicked, this, &SettingsDialog::onSaveClicked);
@@ -241,9 +255,19 @@ void SettingsDialog::updateUIFromViewModel()
 
 void SettingsDialog::onRefreshStateChanged(bool isRefreshing)
 {
-    // 处理Ollama模型刷新状态变化
-    m_refreshOllamaModelsBtn->setEnabled(!isRefreshing);
-    m_refreshOllamaModelsBtn->setText(isRefreshing ? tr("正在刷新...") : tr("刷新模型列表"));
+    // 处理模型刷新状态变化
+    // 根据当前显示的设置页面决定更新哪个按钮
+    int currentIndex = m_modelSettingsStack->currentIndex();
+    
+    if (currentIndex == static_cast<int>(SettingsModel::ModelType::API)) {
+        // 更新API模型获取按钮状态
+        m_fetchApiModelsBtn->setEnabled(!isRefreshing);
+        m_fetchApiModelsBtn->setText(isRefreshing ? tr("正在获取...") : tr("获取模型列表"));
+    } else if (currentIndex == static_cast<int>(SettingsModel::ModelType::Ollama)) {
+        // 更新Ollama模型刷新按钮状态
+        m_refreshOllamaModelsBtn->setEnabled(!isRefreshing);
+        m_refreshOllamaModelsBtn->setText(isRefreshing ? tr("正在刷新...") : tr("刷新模型列表"));
+    }
 }
 
 void SettingsDialog::updateOllamaModelList()
@@ -358,16 +382,20 @@ void SettingsDialog::onBrowseLocalModelClicked()
     LOG_INFO("浏览本地模型");
     
     // 打开文件选择对话框
-    QString filePath = QFileDialog::getOpenFileName(
-        this,
-        tr("选择模型文件"),
-        m_localModelPathInput->text(),
-        tr("模型文件 (*.bin *.gguf *.ggml);;All Files (*)"));
-    
+    QString filePath = QFileDialog::getOpenFileName(this, tr("选择模型文件"), "", tr("GGUF模型文件 (*.gguf);;所有文件 (*)"));
     if (!filePath.isEmpty()) {
         m_localModelPathInput->setText(filePath);
-        m_viewModel->setLocalModelPath(filePath);
     }
+}
+
+void SettingsDialog::onErrorOccurred(const QString& error)
+{
+    // 显示错误消息对话框
+    QMessageBox::warning(this, tr("操作失败"), error);
+    
+    // 如果是获取API模型列表失败，重置按钮状态
+    m_fetchApiModelsBtn->setEnabled(true);
+    m_fetchApiModelsBtn->setText(tr("获取模型列表"));
 }
 
 // 这些方法已经被移除，因为它们已经被新的MVVM架构替代

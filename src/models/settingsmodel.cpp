@@ -478,6 +478,23 @@ QJsonObject SettingsModel::getProviderConfig(const QString& type, const QString&
     return QJsonObject();
 }
 
+void SettingsModel::setProviderConfig(const QString& type, const QString& provider, const QJsonObject& config)
+{
+    if (!m_models_config.contains(type)) {
+        m_models_config[type] = QJsonObject();
+    }
+    
+    QJsonObject typeConfig = m_models_config[type].toObject();
+    typeConfig[provider] = config;
+    m_models_config[type] = typeConfig;
+    
+    // 更新已配置的模型列表
+    updateConfiguredModels();
+    
+    scheduleSave();
+    emit modelConfigChanged();
+}
+
 QString SettingsModel::getProviderApiKey(const QString& type, const QString& provider) const
 {
     QJsonObject providerConfig = getProviderConfig(type, provider);
@@ -555,6 +572,29 @@ void SettingsModel::removeConfiguredModel(const QString& type, const QString& mo
 QString SettingsModel::getCurrentProvider() const
 {
     return m_currentProvider;
+}
+
+QStringList SettingsModel::getConfiguredProviders() const
+{
+    QStringList providers;
+    
+    // 获取API类型的配置
+    QJsonObject apiConfig = getModelConfig("api", "");
+    
+    // 遍历API配置中的所有键，找出所有提供商
+    for (auto it = apiConfig.begin(); it != apiConfig.end(); ++it) {
+        QString key = it.key();
+        // 排除非提供商的键
+        if (key != "has_API" && key != "default_url" && it.value().isObject()) {
+            QJsonObject providerConfig = it.value().toObject();
+            // 检查提供商是否配置了API Key
+            if (providerConfig.contains("api_key") && !providerConfig["api_key"].toString().isEmpty()) {
+                providers.append(key);
+            }
+        }
+    }
+    
+    return providers;
 }
 
 QString SettingsModel::getCurrentApiKey() const

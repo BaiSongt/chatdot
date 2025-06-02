@@ -428,17 +428,41 @@ void MainWindow::updateModelList()
     QString currentModel = m_settingsModel->currentModelName();
     m_modelSelector->clear();
 
-    // 获取当前类型下已配置的模型列表
+    // 获取当前模型类型
     QString modelType = getModelTypeString();
-    QStringList availableModels = m_settingsModel->getConfiguredModels(modelType);
-    LOG_INFO(QString("获取到 %1 类型已配置的模型列表，共 %2 个模型").arg(modelType).arg(availableModels.size()));
-
-    // 根据不同类型处理模型列表
+    QStringList availableModels;
+    
+    // 根据不同类型获取可用模型列表
     if (modelType == "api") {
-        updateApiModels(availableModels);
+        // 对于API类型，获取所有已配置的提供商的所有模型
+        QStringList configuredProviders = m_settingsModel->getConfiguredProviders();
+        LOG_INFO(QString("获取到已配置的API提供商列表，共 %1 个提供商").arg(configuredProviders.size()));
+        
+        // 遍历所有已配置的提供商，获取它们的所有模型
+        for (const QString& provider : configuredProviders) {
+            if (!provider.isEmpty()) {
+                QStringList providerModels = m_settingsViewModel->getApiModelsForProvider(provider);
+                LOG_INFO(QString("获取到API提供商 %1 的所有模型，共 %2 个模型")
+                    .arg(provider)
+                    .arg(providerModels.size()));
+                
+                // 将当前提供商的所有模型添加到可用模型列表
+                updateApiModelsForProvider(provider, providerModels);
+            }
+        }
     } else if (modelType == "ollama") {
+        // 对于Ollama类型，获取已配置的模型
+        availableModels = m_settingsModel->getConfiguredModels(modelType);
+        LOG_INFO(QString("获取到 %1 类型已配置的模型列表，共 %2 个模型")
+            .arg(modelType)
+            .arg(availableModels.size()));
         updateOllamaModels(availableModels);
     } else if (modelType == "local") {
+        // 对于本地类型，获取已配置的模型
+        availableModels = m_settingsModel->getConfiguredModels(modelType);
+        LOG_INFO(QString("获取到 %1 类型已配置的模型列表，共 %2 个模型")
+            .arg(modelType)
+            .arg(availableModels.size()));
         updateLocalModels(availableModels);
     }
 
@@ -482,32 +506,70 @@ void MainWindow::updateModelList()
         .arg(availableModels.size()));
 }
 
-void MainWindow::updateApiModels(const QStringList& availableModels)
+void MainWindow::updateApiModelsForProvider(const QString& provider, const QStringList& availableModels)
 {
-    QJsonObject apiConfig = m_settingsModel->getModelConfig("api", "");
+    if (provider.isEmpty()) {
+        LOG_WARNING("提供商名称为空，无法显示模型列表");
+        return;
+    }
+    
+    LOG_INFO(QString("正在为提供商 %1 更新API模型列表").arg(provider));
+    
+    // 获取提供商的配置
+    QJsonObject providerConfig = m_settingsModel->getProviderConfig("api", provider);
+    
+    // 检查提供商配置是否包含models字段
+    if (!providerConfig.contains("models")) {
+        LOG_WARNING(QString("提供商 %1 配置中不包含models字段").arg(provider));
+        return;
+    }
+    
+    // 检查提供商是否配置了API Key
+    if (!providerConfig.contains("api_key") || providerConfig["api_key"].toString().isEmpty()) {
+        LOG_WARNING(QString("提供商 %1 未配置API Key").arg(provider));
+        return;
+    }
+    
+    // 获取提供商的所有模型配置
+    QJsonObject modelsConfig = providerConfig["models"].toObject();
+    
+    // 遍历传入的所有可用模型
     for (const QString& modelName : availableModels) {
-        // 遍历所有提供商查找模型
-        for (auto providerIt = apiConfig.begin(); providerIt != apiConfig.end(); ++providerIt) {
-            if (providerIt.key() != "has_API" && providerIt.key() != "default_url" && 
-                providerIt.value().isObject()) {
-                QString provider = providerIt.key();
-                QJsonObject providerConfig = providerIt.value().toObject();
-                if (providerConfig.contains("models")) {
-                    QJsonObject models = providerConfig["models"].toObject();
-                    if (models.contains(modelName)) {
-                        bool isComplete = m_settingsModel->isModelConfigComplete("api", modelName);
-                        QStringList missingItems;
-                        if (!isComplete) {
-                            missingItems = m_settingsModel->getMissingConfigItems("api", modelName);
-                        }
-                        QString displayName = getModelDisplayName("api", modelName, provider);
-                        addModelToSelector(displayName, modelName, isComplete, missingItems);
-                        break;
-                    }
-                }
+        // 检查模型是否在配置中
+        if (modelsConfig.contains(modelName)) {
+            // 检查模型配置是否完整
+            bool isComplete = m_settingsModel->isModelConfigComplete("api", modelName);
+            QStringList missingItems;
+            if (!isComplete) {
+                missingItems = m_settingsModel->getMissingConfigItems("api", modelName);
             }
+            
+            // 获取模型显示名称并添加到选择器
+            QString displayName = getModelDisplayName("api", modelName, provider);
+            addModelToSelector(displayName, modelName, isComplete, missingItems);
+            
+            LOG_INFO(QString("添加API模型: %1 (提供商: %2, 显示名称: %3)")
+                .arg(modelName)
+                .arg(provider)
+                .arg(displayName));
+        } else {
+            LOG_WARNING(QString("模型 %1 在提供商 %2 的配置中不存在").arg(modelName, provider));
         }
     }
+}
+
+void MainWindow::updateApiModels(const QStringList& availableModels)
+{
+    // 此方法保留为兼容性考虑，实际上已经不再使用
+    // 获取当前选择的API提供商
+    QString currentProvider = m_settingsModel->getCurrentProvider();
+    if (currentProvider.isEmpty()) {
+        LOG_WARNING("当前未选择API提供商，无法显示模型列表");
+        return;
+    }
+    
+    // 调用新的方法处理当前提供商的模型
+    updateApiModelsForProvider(currentProvider, availableModels);
 }
 
 void MainWindow::updateOllamaModels(const QStringList& availableModels)

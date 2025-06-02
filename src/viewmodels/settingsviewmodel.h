@@ -50,6 +50,7 @@ public:
     Q_INVOKABLE void saveSettings();
     Q_INVOKABLE void loadSettings();
     Q_INVOKABLE void refreshOllamaModels();
+    Q_INVOKABLE void fetchApiModelsFromProvider(const QString& provider);
     Q_INVOKABLE QStringList getApiModelsForProvider(const QString& provider);
     Q_INVOKABLE QStringList getApiModels(const QString& provider);
     Q_INVOKABLE QString getProviderApiKey(const QString& provider);

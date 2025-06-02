@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QScrollBar>
 #include <QActionGroup>
+#include "../utils/markdownparser.h"
 #include "models/chatmodel.h"
 #include "models/imagemodel.h"
 #include "models/settingsmodel.h"
@@ -199,6 +200,8 @@ void MainWindow::setupUI()
     m_mainLayout = new QVBoxLayout(m_centralWidget);
     m_mainLayout->setSpacing(10);  // 设置组件之间的间距
     m_mainLayout->setContentsMargins(10, 10, 10, 10);  // 设置边距
+    
+    // CSS动画和样式将在创建聊天显示区域时添加
 
     // 顶部工具栏布局
     QHBoxLayout* topLayout = new QHBoxLayout();
@@ -217,46 +220,210 @@ void MainWindow::setupUI()
 
     m_mainLayout->addLayout(topLayout);
 
-    // 聊天显示区域
+    // 聊天显示区域 - 使用现代化样式
     m_chatDisplay = new QTextEdit(this);
+    m_chatDisplay->setObjectName("chatDisplay"); // 设置对象名称以匹配主题样式
     m_chatDisplay->setReadOnly(true);
     m_chatDisplay->setMinimumHeight(500);  // 增加聊天区域高度
+    
+    // 从主题文件中加载聊天气泡样式
+    QString chatBubblesStyle;
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString bubblePath = QDir(appDir).absoluteFilePath("themes/chat_bubbles.css");
+    
+    QFile bubbleFile(bubblePath);
+    if (bubbleFile.open(QFile::ReadOnly | QFile::Text)) {
+        chatBubblesStyle = QString::fromUtf8(bubbleFile.readAll());
+        bubbleFile.close();
+        LOG_INFO(QString("成功加载聊天气泡样式: %1").arg(bubblePath));
+    } else {
+        LOG_WARNING(QString("无法打开聊天气泡样式文件: %1, 错误: %2")
+            .arg(bubblePath)
+            .arg(bubbleFile.errorString()));
+        
+        // 使用默认样式
+        chatBubblesStyle = 
+            "@keyframes fadeIn {"
+            "  from { opacity: 0; transform: translateY(10px); }"
+            "  to { opacity: 1; transform: translateY(0); }"
+            "}"
+            ".message-container {"
+            "  display: flex;"
+            "  align-items: flex-start;"
+            "  margin-bottom: 12px;"
+            "  animation: fadeIn 0.3s ease-in-out;"
+            "  clear: both;"
+            "}"
+            ".avatar {"
+            "  width: 36px;"
+            "  height: 36px;"
+            "  margin-right: 10px;"
+            "  flex-shrink: 0;"
+            "  border-radius: 18px;"
+            "  text-align: center;"
+            "  line-height: 36px;"
+            "  font-weight: bold;"
+            "  color: white;"
+            "}"
+            ".user-avatar { background-color: #2979FF; }"
+            ".ai-avatar { background-color: #00BFA5; }"
+            ".message-content {"
+            "  flex-grow: 1;"
+            "  max-width: calc(100% - 46px);"
+            "}"
+            ".sender-info {"
+            "  font-weight: bold;"
+            "  margin-bottom: 2px;"
+            "}"
+            ".timestamp {"
+            "  color: #888;"
+            "  font-weight: normal;"
+            "  font-size: 0.8em;"
+            "}"
+            ".user-bubble-light {"
+            "  background-color: #e1f3fb;"
+            "  color: #000000;"
+            "  border-radius: 10px;"
+            "  padding: 10px;"
+            "  margin: 5px 0;"
+            "  display: inline-block;"
+            "  max-width: 100%;"
+            "  word-wrap: break-word;"
+            "  box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
+            "}"
+            ".ai-bubble-light {"
+            "  background-color: #f0f0f0;"
+            "  color: #000000;"
+            "  border-radius: 10px;"
+            "  padding: 10px;"
+            "  margin: 5px 0;"
+            "  display: inline-block;"
+            "  max-width: 100%;"
+            "  word-wrap: break-word;"
+            "  box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
+            "}"
+            ".user-bubble-dark {"
+            "  background-color: #2C4F70;"
+            "  color: #FFFFFF;"
+            "  border-radius: 10px;"
+            "  padding: 10px;"
+            "  margin: 5px 0;"
+            "  display: inline-block;"
+            "  max-width: 100%;"
+            "  word-wrap: break-word;"
+            "  box-shadow: 0 1px 2px rgba(0,0,0,0.3);"
+            "}"
+            ".ai-bubble-dark {"
+            "  background-color: #383838;"
+            "  color: #FFFFFF;"
+            "  border-radius: 10px;"
+            "  padding: 10px;"
+            "  margin: 5px 0;"
+            "  display: inline-block;"
+            "  max-width: 100%;"
+            "  word-wrap: break-word;"
+            "  box-shadow: 0 1px 2px rgba(0,0,0,0.3);"
+            "}"
+            ".markdown-content h1 {"
+            "  font-size: 1.5em;"
+            "  margin: 0.5em 0;"
+            "  border-bottom: 1px solid #ddd;"
+            "  padding-bottom: 0.3em;"
+            "}"
+            ".markdown-content h2 {"
+            "  font-size: 1.3em;"
+            "  margin: 0.5em 0;"
+            "}"
+            ".markdown-content h3 {"
+            "  font-size: 1.1em;"
+            "  margin: 0.5em 0;"
+            "}"
+            ".markdown-content ul, .markdown-content ol {"
+            "  padding-left: 1.5em;"
+            "  margin: 0.5em 0;"
+            "}"
+            ".markdown-content li {"
+            "  margin: 0.2em 0;"
+            "}"
+            ".markdown-content code {"
+            "  background-color: rgba(0, 0, 0, 0.1);"
+            "  padding: 0.2em 0.4em;"
+            "  border-radius: 3px;"
+            "  font-family: monospace;"
+            "}"
+            ".markdown-content pre {"
+            "  background-color: rgba(0, 0, 0, 0.1);"
+            "  padding: 0.5em;"
+            "  border-radius: 5px;"
+            "  overflow-x: auto;"
+            "  margin: 0.5em 0;"
+            "}"
+            ".markdown-content pre code {"
+            "  background-color: transparent;"
+            "  padding: 0;"
+            "}"
+            ".markdown-content blockquote {"
+            "  border-left: 4px solid #ccc;"
+            "  padding-left: 1em;"
+            "  margin: 0.5em 0;"
+            "  color: #777;"
+            "}"
+            ".markdown-content p {"
+            "  margin: 0.5em 0;"
+            "}";
+    }
+    
+    // 设置样式表
+    m_chatDisplay->document()->setDefaultStyleSheet(chatBubblesStyle);
+    
+    // 设置文档背景和间距
+    m_chatDisplay->document()->setDocumentMargin(10);
     m_mainLayout->addWidget(m_chatDisplay);
 
-    // 功能按钮区域
+    // 功能按钮区域 - 简洁紧凑样式
     QHBoxLayout* functionLayout = new QHBoxLayout();
-    functionLayout->setSpacing(8);
+    functionLayout->setSpacing(5); // 减少间距
+    functionLayout->setContentsMargins(0, 0, 0, 0); // 移除边距
 
-    m_clearButton = new QPushButton(this->tr("清除"), this);
-    m_clearButton->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
-    m_clearButton->setFixedWidth(80);
+    // 创建简洁的按钮样式
+    auto createCompactButton = [this](QPushButton* &button, const QString &text, QStyle::StandardPixmap icon, int width) {
+        button = new QPushButton(text, this);
+        button->setIcon(style()->standardIcon(icon));
+        button->setFixedWidth(width);
+        button->setFixedHeight(32); // 减少高度
+        button->setObjectName("compactButton"); // 统一样式名
+        return button;
+    };
+
+    m_clearButton = createCompactButton(m_clearButton, this->tr("清除"), QStyle::SP_DialogResetButton, 70);
     functionLayout->addWidget(m_clearButton);
 
-    m_imageButton = new QPushButton(this->tr("图片"), this);
-    m_imageButton->setIcon(style()->standardIcon(QStyle::SP_FileIcon));
-    m_imageButton->setFixedWidth(80);
+    m_imageButton = createCompactButton(m_imageButton, this->tr("图片"), QStyle::SP_FileIcon, 70);
     functionLayout->addWidget(m_imageButton);
 
-    m_deepThinkingButton = new QPushButton(this->tr("深度思考"), this);
-    m_deepThinkingButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
-    m_deepThinkingButton->setFixedWidth(80);
+    m_deepThinkingButton = createCompactButton(m_deepThinkingButton, this->tr("思考"), QStyle::SP_FileDialogDetailedView, 70);
     m_deepThinkingButton->setCheckable(true);  // 设置为可切换状态
     functionLayout->addWidget(m_deepThinkingButton);
 
     functionLayout->addStretch();
     m_mainLayout->addLayout(functionLayout);
 
-    // 输入区域
+    // 输入区域 - 简洁紧凑样式
     QHBoxLayout* inputLayout = new QHBoxLayout();
-    inputLayout->setSpacing(8);  // 设置按钮之间的间距
+    inputLayout->setSpacing(5);  // 减少间距
+    inputLayout->setContentsMargins(0, 5, 0, 0); // 只保留上边距
 
     m_messageInput = new QLineEdit(this);
+    m_messageInput->setObjectName("messageInput"); // 设置对象名称以匹配主题样式
     m_messageInput->setPlaceholderText(this->tr("输入消息..."));
+    m_messageInput->setFixedHeight(36); // 调整高度
     inputLayout->addWidget(m_messageInput);
 
     m_sendButton = new QPushButton(this->tr("发送"), this);
+    m_sendButton->setObjectName("sendButton"); // 设置对象名称以匹配主题样式
     m_sendButton->setIcon(style()->standardIcon(QStyle::SP_CommandLink));
-    m_sendButton->setFixedWidth(80);
+    m_sendButton->setFixedWidth(70);
+    m_sendButton->setFixedHeight(36); // 与输入框保持一致高度
     inputLayout->addWidget(m_sendButton);
 
     m_mainLayout->addLayout(inputLayout);
@@ -761,6 +928,21 @@ void MainWindow::saveSettings()
     LOG_INFO("设置保存完成");
 }
 
+void MainWindow::applyMessageAnimation()
+{
+    // 获取最后一个消息元素并应用淡入动画
+    QTextCursor cursor = m_chatDisplay->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    m_chatDisplay->setTextCursor(cursor);
+    
+    // 确保滚动到底部以显示新消息
+    QScrollBar* scrollBar = m_chatDisplay->verticalScrollBar();
+    scrollBar->setValue(scrollBar->maximum());
+    
+    // 给消息容器应用动画效果
+    // 注意：动画已在CSS中定义，这里只需要确保滚动到最新消息
+}
+
 void MainWindow::onSendMessage()
 {
     QString message = m_messageInput->text().trimmed();
@@ -768,12 +950,58 @@ void MainWindow::onSendMessage()
         return;
     }
 
-    // 显示用户消息
-    m_chatDisplay->append(this->tr("<p><b>用户:</b> %1</p>").arg(message));
+    // 获取当前时间
+    QDateTime currentTime = QDateTime::currentDateTime();
+    QString timeStr = currentTime.toString("yyyy-MM-dd hh:mm:ss");
+    
+    // 将用户消息转换为HTML（支持Markdown语法）
+    QString htmlMessage = MarkdownParser::toHtml(message);
+    
+    // 获取气泡样式类名
+    QString userBubbleClass = ThemeManager::instance().getUserBubbleStyle();
+    
+    // 添加用户头像和气泡样式的消息，使用CSS类
+    m_chatDisplay->append(QString(
+        "<div class='message-container'>\n"
+        "  <div class='avatar user-avatar'>用</div>\n"
+        "  <div class='message-content'>\n"
+        "    <div class='sender-info'>用户 <span class='timestamp'>[%1]</span></div>\n"
+        "    <div class='%2 markdown-content'>%3</div>\n"
+        "  </div>\n"
+        "</div>")
+        .arg(timeStr)
+        .arg(userBubbleClass)
+        .arg(htmlMessage));
+    
+    // 应用消息动画
+    applyMessageAnimation();
+
     m_messageInput->clear();
 
-    // 添加 AI 的初始响应
-    m_chatDisplay->append(this->tr("<p><b>AI:</b> "));
+    // 获取AI名称
+    QString aiName = m_settingsModel->aiName();
+    if (aiName.isEmpty()) {
+        aiName = "皮蛋"; // 默认名称
+    }
+    
+    // 获取AI气泡样式类名
+    QString aiBubbleClass = ThemeManager::instance().getAIBubbleStyle();
+    QDateTime aiResponseTime = QDateTime::currentDateTime();
+    QString aiTimeStr = aiResponseTime.toString("yyyy-MM-dd hh:mm:ss");
+    
+    // 添加AI头像和气泡样式的初始响应，使用CSS类
+    m_chatDisplay->append(QString(
+        "<div class='message-container'>\n"
+        "  <div class='avatar ai-avatar'>皮</div>\n"
+        "  <div class='message-content'>\n"
+        "    <div class='sender-info'>%1 <span class='timestamp'>[%2]</span></div>\n"
+        "    <div class='%3 markdown-content'>")
+        .arg(aiName)
+        .arg(aiTimeStr)
+        .arg(aiBubbleClass));
+    
+    // 应用消息动画
+    applyMessageAnimation();
 
     // 发送消息
     m_chatViewModel->sendMessage(message);
@@ -787,15 +1015,57 @@ void MainWindow::onGenerationStarted()
 void MainWindow::onGenerationFinished()
 {
     updateSendButton(false);
-    // 完成当前响应
-    m_chatDisplay->append("</p>");
+    
+    // 完成当前响应，关闭HTML标签
+    m_chatDisplay->moveCursor(QTextCursor::End);
+    m_chatDisplay->insertHtml("</div>\n  </div>\n</div>");
+    
+    // 应用消息动画
+    applyMessageAnimation();
+    
+    // 确保滚动到最新消息
+    m_chatDisplay->verticalScrollBar()->setValue(
+        m_chatDisplay->verticalScrollBar()->maximum()
+    );
 }
 
 void MainWindow::onStreamResponse(const QString& partialResponse)
 {
-    // 在当前行追加部分响应
-    m_chatDisplay->moveCursor(QTextCursor::End);
-    m_chatDisplay->insertPlainText(partialResponse);
+    // 对于流式响应，我们使用简化的Markdown解析
+    QString processedResponse = partialResponse.toHtmlEscaped().replace("\n", "<br>");
+    
+    // 处理行内代码段 `code`
+    QRegularExpression inlineCodeRegex("`([^`]*?)`");
+    QRegularExpressionMatchIterator i = inlineCodeRegex.globalMatch(processedResponse);
+    while (i.hasNext()) {
+        QRegularExpressionMatch match = i.next();
+        QString code = match.captured(1);
+        QString htmlCode = QString("<code style=\"background-color: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace;\">%1</code>").arg(code);
+        processedResponse.replace(match.captured(0), htmlCode);
+    }
+    
+    // 处理粗体 **text**
+    QRegularExpression boldRegex("\\*\\*(.*?)\\*\\*");
+    i = boldRegex.globalMatch(processedResponse);
+    while (i.hasNext()) {
+        QRegularExpressionMatch match = i.next();
+        QString text = match.captured(1);
+        QString htmlText = QString("<strong>%1</strong>").arg(text);
+        processedResponse.replace(match.captured(0), htmlText);
+    }
+    
+    // 处理斜体 *text*
+    QRegularExpression italicRegex("\\*([^\\*]*?)\\*");
+    i = italicRegex.globalMatch(processedResponse);
+    while (i.hasNext()) {
+        QRegularExpressionMatch match = i.next();
+        QString text = match.captured(1);
+        QString htmlText = QString("<em>%1</em>").arg(text);
+        processedResponse.replace(match.captured(0), htmlText);
+    }
+    
+    m_chatDisplay->insertHtml(processedResponse);
+    
     // 保持滚动到底部
     m_chatDisplay->verticalScrollBar()->setValue(
         m_chatDisplay->verticalScrollBar()->maximum()
@@ -923,8 +1193,9 @@ void MainWindow::onAbout()
         tr("关于 ChatDot"),
         tr("ChatDot - AI聊天助手\n\n"
            "版本: 1.0.0\n"
-           "一个简单而强大的AI聊天应用程序。\n\n"
-           "支持多种AI模型，包括：\n"
+           "一个简单而强大的聊天应用程序。\n\n"
+           "角色预设: 皮蛋 - 你的智能聊天助手\n\n"
+           "支持多种模型，包括：\n"
            "- OpenAI API\n"
            "- Deepseek API\n"
            "- Ollama本地模型\n"

@@ -21,6 +21,9 @@ public:
 
     Theme currentTheme() const;
     QString currentStyleSheet() const;
+    // 获取聊天气泡样式
+    QString getUserBubbleStyle() const;
+    QString getAIBubbleStyle() const;
 
 public slots:
     void setTheme(Theme theme);

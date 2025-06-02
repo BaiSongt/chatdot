@@ -18,11 +18,15 @@ class SettingsModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString apiKey READ apiKey WRITE setApiKey NOTIFY apiKeyChanged)
-    Q_PROPERTY(QString modelPath READ modelPath WRITE setModelPath NOTIFY modelPathChanged)
-    Q_PROPERTY(ModelType modelType READ modelType WRITE setModelType NOTIFY modelTypeChanged)
-    Q_PROPERTY(QString apiUrl READ apiUrl WRITE setApiUrl NOTIFY apiUrlChanged)
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
+    Q_PROPERTY(bool autoSave READ autoSave WRITE setAutoSave NOTIFY autoSaveChanged)
+    Q_PROPERTY(int saveInterval READ saveInterval WRITE setSaveInterval NOTIFY saveIntervalChanged)
+    Q_PROPERTY(QString aiName READ aiName WRITE setAiName NOTIFY aiNameChanged)
+    Q_PROPERTY(QString rolePrompt READ rolePrompt WRITE setRolePrompt NOTIFY rolePromptChanged)
     Q_PROPERTY(QString currentModelName READ currentModelName WRITE setCurrentModelName NOTIFY currentModelNameChanged)
     Q_PROPERTY(QStringList ollamaModels READ ollamaModels WRITE setOllamaModels NOTIFY ollamaModelsChanged)
+    Q_PROPERTY(QString rolePreset READ rolePreset WRITE setRolePreset NOTIFY rolePresetChanged)
+    Q_PROPERTY(QStringList rolePresets READ rolePresets WRITE setRolePresets NOTIFY rolePresetsChanged)
 
 public:
     enum class ModelType {
@@ -98,6 +102,19 @@ public:
 
     int saveInterval() const { return m_saveInterval; }
     void setSaveInterval(int seconds);
+
+    // 角色预设相关
+    QString aiName() const { return m_aiName; }
+    void setAiName(const QString &name);
+
+    QString rolePrompt() const { return m_rolePrompt; }
+    void setRolePrompt(const QString &prompt);
+
+    QString rolePreset() const { return m_rolePreset; }
+    void setRolePreset(const QString &preset);
+
+    QStringList rolePresets() const { return m_rolePresets; }
+    void setRolePresets(const QStringList &presets);
 
     bool proxyEnabled() const { return m_proxyEnabled; }
     void setProxyEnabled(bool enabled);
@@ -193,6 +210,10 @@ signals:
     void autoSaveChanged();
     void saveIntervalChanged();
     void proxySettingsChanged();
+    void aiNameChanged();
+    void rolePromptChanged();
+    void rolePresetChanged();
+    void rolePresetsChanged();
 
 private:
     SettingsModel(const SettingsModel&) = delete;
@@ -221,6 +242,12 @@ private:
     QString m_language;
     bool m_autoSave;
     int m_saveInterval;
+
+    // 角色预设相关变量
+    QString m_aiName = "皮蛋";
+    QString m_rolePrompt = "你是一个智能助手皮蛋，可以回答用户的各种问题。";
+    QString m_rolePreset = "皮蛋";
+    QStringList m_rolePresets;
 
     bool m_proxyEnabled;
     QString m_proxyHost;

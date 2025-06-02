@@ -48,6 +48,18 @@ QScrollArea {
     background-color: #F8F8F8;
 }
 
+/* 聊天显示区域 */
+QTextEdit#chatDisplay {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* 普通文本编辑器 */
 QTextEdit {
     border: 1px solid #E0E0E0;
     border-radius: 4px;
@@ -65,6 +77,21 @@ QLineEdit {
     color: #212121;
 }
 
+/* 消息输入框特殊样式 */
+QLineEdit#messageInput {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 20px;
+    padding: 5px 15px;
+    font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    min-height: 40px;
+}
+
+QLineEdit#messageInput:focus {
+    border: 1px solid #0078d7;
+}
+
 QLineEdit:focus {
     border: 1px solid #1976D2;
     background-color: #FFFFFF;
@@ -78,6 +105,59 @@ QPushButton {
     border-radius: 4px;
     padding: 8px 16px;
     min-width: 80px;
+}
+
+/* 发送按钮特殊样式 */
+QPushButton#sendButton {
+    background-color: #0078d7;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 5px 15px;
+    font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    min-height: 40px;
+}
+
+QPushButton#sendButton:hover {
+    background-color: #005fa3;
+}
+
+QPushButton#sendButton:pressed {
+    background-color: #004c82;
+}
+
+/* 功能按钮样式 */
+QPushButton#clearButton, QPushButton#imageButton, QPushButton#deepThinkingButton {
+    background-color: #f5f5f5;
+    color: #333333;
+    border: 1px solid #e0e0e0;
+    border-radius: 15px;
+    padding: 5px 10px;
+    font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    font-size: 13px;
+    min-height: 36px;
+}
+
+QPushButton#clearButton:hover, QPushButton#imageButton:hover, QPushButton#deepThinkingButton:hover {
+    background-color: #e0e0e0;
+}
+
+QPushButton#clearButton:pressed, QPushButton#imageButton:pressed, QPushButton#deepThinkingButton:pressed {
+    background-color: #d0d0d0;
+}
+
+QPushButton#deepThinkingButton:checked {
+    background-color: #0078d7;
+    color: white;
+}
+
+QPushButton#deepThinkingButton:checked:hover {
+    background-color: #005fa3;
+}
+
+QPushButton#deepThinkingButton:checked:pressed {
+    background-color: #004c82;
 }
 
 QPushButton:hover {

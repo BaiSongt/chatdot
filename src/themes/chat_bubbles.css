@@ -1,0 +1,229 @@
+/* 聊天气泡样式定义 */
+
+/* 消息动画 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 消息容器 */
+.message-container {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    animation: fadeIn 0.3s ease-in-out;
+    clear: both;
+}
+
+/* 头像样式 */
+.avatar {
+    width: 36px;
+    height: 36px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    border-radius: 18px;
+    text-align: center;
+    line-height: 36px;
+    font-weight: bold;
+    color: white;
+}
+
+.user-avatar {
+    background-color: #2979FF;
+}
+
+.ai-avatar {
+    background-color: #00BFA5;
+}
+
+/* 消息内容容器 */
+.message-content {
+    flex-grow: 0;
+    max-width: calc(100% - 46px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* 发送者名称和时间戳 */
+.sender-info {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.timestamp {
+    color: #888;
+    font-weight: normal;
+    font-size: 0.8em;
+}
+
+/* 气泡基本样式 */
+.bubble-base {
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 5px 0;
+    display: block;
+    max-width: 80%;
+    word-wrap: break-word;
+    float: left;
+    clear: both;
+}
+
+/* 用户消息样式 - 浅色主题 */
+.user-bubble-light {
+    background-color: #e1f3fb;
+    color: #000000;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 5px 0;
+    display: block;
+    max-width: 80%;
+    word-wrap: break-word;
+    float: left;
+    clear: both;
+}
+
+/* AI消息样式 - 浅色主题 */
+.ai-bubble-light {
+    background-color: #f0f0f0;
+    color: #000000;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 5px 0;
+    display: block;
+    max-width: 80%;
+    word-wrap: break-word;
+    float: left;
+    clear: both;
+}
+
+/* 用户消息样式 - 深色主题 */
+.user-bubble-dark {
+    background-color: #2C4F70;
+    color: #FFFFFF;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 5px 0;
+    display: block;
+    max-width: 80%;
+    word-wrap: break-word;
+    float: left;
+    clear: both;
+}
+
+/* AI消息样式 - 深色主题 */
+.ai-bubble-dark {
+    background-color: #383838;
+    color: #FFFFFF;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin: 5px 0;
+    display: block;
+    max-width: 80%;
+    word-wrap: break-word;
+    float: left;
+    clear: both;
+}
+
+/* 按钮样式 */
+#compactButton {
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* 浅色主题按钮 */
+.light-theme #compactButton {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    color: #333;
+}
+
+/* 深色主题按钮 */
+.dark-theme #compactButton {
+    background-color: #444;
+    border: 1px solid #555;
+    color: #eee;
+}
+
+/* 发送按钮特殊样式 */
+#sendButton {
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+/* 浅色主题发送按钮 */
+.light-theme #sendButton {
+    background-color: #2979FF;
+    color: white;
+    border: none;
+}
+
+/* 深色主题发送按钮 */
+.dark-theme #sendButton {
+    background-color: #2C4F70;
+    color: white;
+    border: none;
+}
+
+/* Markdown样式 */
+.markdown-content h1 {
+    font-size: 1.5em;
+    margin: 0.5em 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 0.3em;
+}
+
+.markdown-content h2 {
+    font-size: 1.3em;
+    margin: 0.5em 0;
+}
+
+.markdown-content h3 {
+    font-size: 1.1em;
+    margin: 0.5em 0;
+}
+
+.markdown-content ul, .markdown-content ol {
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+}
+
+.markdown-content li {
+    margin: 0.2em 0;
+}
+
+.markdown-content code {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+.markdown-content pre {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.5em;
+    border-radius: 5px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.markdown-content blockquote {
+    border-left: 4px solid #ccc;
+    padding-left: 1em;
+    margin: 0.5em 0;
+    color: #777;
+}
+
+.markdown-content p {
+    margin: 0.5em 0;
+}

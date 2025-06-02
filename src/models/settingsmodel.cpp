@@ -789,6 +789,29 @@ void SettingsModel::loadBasicSettings(const QJsonObject& root)
     if (!m_proxyPassword.isEmpty()) {
         m_proxyPassword = root["proxyPassword"].toString();
     }
+    
+    // 加载角色预设相关设置
+    if (root.contains("aiName")) {
+        m_aiName = root["aiName"].toString();
+    }
+    if (root.contains("rolePrompt")) {
+        m_rolePrompt = root["rolePrompt"].toString();
+    }
+    if (root.contains("rolePreset")) {
+        m_rolePreset = root["rolePreset"].toString();
+    }
+    if (root.contains("rolePresets") && root["rolePresets"].isArray()) {
+        m_rolePresets.clear();
+        QJsonArray presets = root["rolePresets"].toArray();
+        for (const QJsonValue& value : presets) {
+            m_rolePresets.append(value.toString());
+        }
+    } else {
+        // 默认角色预设
+        if (m_rolePresets.isEmpty()) {
+            m_rolePresets << "皮蛋";
+        }
+    }
 }
 
 void SettingsModel::loadModelSpecificSettings()
@@ -987,6 +1010,17 @@ void SettingsModel::saveSettings()
     if (!m_proxyPassword.isEmpty()) {
         obj["proxyPassword"] = m_proxyPassword;
     }
+
+    // 保存角色预设相关设置
+    obj["aiName"] = m_aiName;
+    obj["rolePrompt"] = m_rolePrompt;
+    obj["rolePreset"] = m_rolePreset;
+    
+    QJsonArray presetsArray;
+    for (const QString& preset : m_rolePresets) {
+        presetsArray.append(preset);
+    }
+    obj["rolePresets"] = presetsArray;
 
     QJsonDocument doc(obj);
 
@@ -1325,8 +1359,72 @@ void SettingsModel::setOllamaUrl(const QString &url)
 {
     if (m_ollamaUrl != url) {
         m_ollamaUrl = url;
-        // 将URL保存到应用状态
-        setAppStateValue("ollamaUrl", url);
+        emit ollamaUrlChanged();
+        scheduleSave();
+    }
+}
+
+// 语言设置相关的setter方法
+void SettingsModel::setLanguage(const QString &language)
+{
+    if (m_language != language) {
+        m_language = language;
+        emit languageChanged();
+        scheduleSave();
+    }
+}
+
+void SettingsModel::setAutoSave(bool autoSave)
+{
+    if (m_autoSave != autoSave) {
+        m_autoSave = autoSave;
+        emit autoSaveChanged();
+        scheduleSave();
+    }
+}
+
+void SettingsModel::setSaveInterval(int interval)
+{
+    if (m_saveInterval != interval) {
+        m_saveInterval = interval;
+        emit saveIntervalChanged();
+        scheduleSave();
+    }
+}
+
+// 角色预设相关的setter方法
+void SettingsModel::setAiName(const QString &name)
+{
+    if (m_aiName != name) {
+        m_aiName = name;
+        emit aiNameChanged();
+        scheduleSave();
+    }
+}
+
+void SettingsModel::setRolePrompt(const QString &prompt)
+{
+    if (m_rolePrompt != prompt) {
+        m_rolePrompt = prompt;
+        emit rolePromptChanged();
+        scheduleSave();
+    }
+}
+
+void SettingsModel::setRolePreset(const QString &preset)
+{
+    if (m_rolePreset != preset) {
+        m_rolePreset = preset;
+        emit rolePresetChanged();
+        scheduleSave();
+    }
+}
+
+void SettingsModel::setRolePresets(const QStringList &presets)
+{
+    if (m_rolePresets != presets) {
+        m_rolePresets = presets;
+        emit rolePresetsChanged();
         scheduleSave();
     }
 }

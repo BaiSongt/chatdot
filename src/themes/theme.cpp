@@ -45,6 +45,22 @@ QString ThemeManager::currentStyleSheet() const
     return m_currentStyleSheet;
 }
 
+QString ThemeManager::getUserBubbleStyle() const
+{
+    // 根据当前主题返回用户气泡样式类名
+    bool isDark = (m_currentTheme == Theme::Dark) || 
+                  (m_currentTheme == Theme::System && isSystemDarkMode());
+    return isDark ? "user-bubble-dark" : "user-bubble-light";
+}
+
+QString ThemeManager::getAIBubbleStyle() const
+{
+    // 根据当前主题返回AI气泡样式类名
+    bool isDark = (m_currentTheme == Theme::Dark) || 
+                  (m_currentTheme == Theme::System && isSystemDarkMode());
+    return isDark ? "ai-bubble-dark" : "ai-bubble-light";
+}
+
 void ThemeManager::applyTheme()
 {
     QString themeFile;
@@ -59,15 +75,22 @@ void ThemeManager::applyTheme()
             themeFile = isSystemDarkMode() ? "themes/dark.qss" : "themes/light.qss";
             break;
     }
+    
+    // 同时加载聊天气泡样式文件
+    QString chatBubblesFile = "themes/chat_bubbles.css";
 
     // 获取应用程序目录
     QString appDir = QCoreApplication::applicationDirPath();
     QString fullPath = QDir(appDir).absoluteFilePath(themeFile);
+    QString bubblePath = QDir(appDir).absoluteFilePath(chatBubblesFile);
     LOG_INFO(QString("正在加载主题文件: %1").arg(fullPath));
+    LOG_INFO(QString("正在加载聊天气泡样式: %1").arg(bubblePath));
 
+    // 读取主题文件
+    QString styleSheet;
     QFile file(fullPath);
     if (file.open(QFile::ReadOnly | QFile::Text)) {
-        QString styleSheet = QString::fromUtf8(file.readAll());
+        styleSheet = QString::fromUtf8(file.readAll());
         file.close();
 
         // 检查样式表内容是否为空
@@ -75,19 +98,36 @@ void ThemeManager::applyTheme()
             LOG_ERROR(QString("主题文件为空: %1").arg(fullPath));
             return;
         }
-
-        // 尝试应用样式表
-        try {
-            qApp->setStyleSheet(styleSheet);
-            m_currentStyleSheet = styleSheet;
-            LOG_INFO(QString("成功加载主题: %1").arg(themeFile));
-        } catch (const std::exception& e) {
-            LOG_ERROR(QString("应用主题时发生错误: %1").arg(e.what()));
-        }
     } else {
         LOG_ERROR(QString("无法打开主题文件: %1, 错误: %2")
             .arg(fullPath)
             .arg(file.errorString()));
+        return;
+    }
+    
+    // 读取聊天气泡样式文件并合并
+    QFile bubbleFile(bubblePath);
+    if (bubbleFile.open(QFile::ReadOnly | QFile::Text)) {
+        QString bubbleStyleSheet = QString::fromUtf8(bubbleFile.readAll());
+        bubbleFile.close();
+        
+        if (!bubbleStyleSheet.isEmpty()) {
+            styleSheet += "\n" + bubbleStyleSheet;
+            LOG_INFO("成功加载聊天气泡样式");
+        }
+    } else {
+        LOG_WARNING(QString("无法打开聊天气泡样式文件: %1, 错误: %2")
+            .arg(bubblePath)
+            .arg(bubbleFile.errorString()));
+    }
+
+    // 尝试应用样式表
+    try {
+        qApp->setStyleSheet(styleSheet);
+        m_currentStyleSheet = styleSheet;
+        LOG_INFO(QString("成功加载主题: %1").arg(themeFile));
+    } catch (const std::exception& e) {
+        LOG_ERROR(QString("应用主题时发生错误: %1").arg(e.what()));
     }
 }
 

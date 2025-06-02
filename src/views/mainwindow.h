@@ -5,15 +5,19 @@
 #include <QTextEdit>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QComboBox>
 #include <QMenu>
+#include <QAction>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QPropertyAnimation>
+#include <QGraphicsOpacityEffect>
 #include <QMenuBar>
 #include <QStatusBar>
-#include <QMessageBox>
-#include <QFileDialog>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
+#include "themes/theme.h"
 #include "models/chatmodel.h"
 #include "models/imagemodel.h"
 #include "models/settingsmodel.h"
@@ -64,6 +68,9 @@ private:
     void showError(const QString& title, const QString& message);
     void refreshModelList();
     void updateSendButton(bool isGenerating);
+    
+    // 消息动画相关方法
+    void applyMessageAnimation();
 
     // 模型列表更新相关方法
     void updateApiModelsForProvider(const QString& provider, const QStringList& availableModels);
